@@ -263,10 +263,12 @@
     color: var(--color-ink);
   }
 
-  /* iOS hace zoom en cualquier input bajo 16px. En móvil se sube, sin excepción. */
-  @media (max-width: 767px) {
-    input, select, textarea { font-size: 1rem; }
-  }
+}
+
+/* iOS hace zoom en cualquier input bajo 16px. Va SIN capa a propósito: dentro
+   de @layer base las utilidades de Tailwind le ganan en la cascada. */
+@media (max-width: 767px) {
+  input, select, textarea { font-size: 1rem; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Chip'
 import { Field } from '@/components/ui/Field'
 import { cn } from '@/lib/cn'
+import { useDialogo } from '@/lib/useDialogo'
 
 const CLP = new Intl.NumberFormat('es-CL', {
   style: 'currency',
@@ -49,35 +50,21 @@ function Swatch({ name, cls, hex }: { name: string; cls: string; hex: string }) 
   )
 }
 
-export default function App() {
-  const [dark, setDark] = useState(false)
+export default function DesignSystem() {
   const [modal, setModal] = useState(false)
   const [cuadrado, setCuadrado] = useState(true)
   const reduce = useReducedMotion()
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', dark)
-  }, [dark])
+  const cerrarModal = useCallback(() => setModal(false), [])
+  const panelModal = useDialogo(modal, cerrarModal)
 
   const debe = ASIENTO.reduce((s, l) => s + l.debe, 0)
   const haber = ASIENTO.reduce((s, l) => s + l.haber, 0) - (cuadrado ? 0 : 340_000)
   const desvio = debe - haber
 
   return (
-    <div className="min-h-dvh">
-      <header className="sticky top-0 z-20 border-b border-line bg-canvas/85 backdrop-blur-sm">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
-          <div className="flex items-baseline gap-2.5">
-            <span className="text-base font-semibold tracking-tight">Agrícola El Bosque</span>
-            <span className="text-2xs text-ink-faint">Design system · v0.1</span>
-          </div>
-          <Button size="sm" onClick={() => setDark((d) => !d)}>
-            {dark ? 'Modo claro' : 'Modo oscuro'}
-          </Button>
-        </div>
-      </header>
+    <div>
 
-      <main className="mx-auto max-w-5xl px-6 pb-24">
+      <div className="mx-auto max-w-5xl pb-16">
         <div className="py-12">
           <h1 className="max-w-[20ch] text-3xl font-semibold tracking-tight">
             Un instrumento de precisión, no una vitrina.
@@ -283,7 +270,7 @@ export default function App() {
             color, y desaparece todo desplazamiento.
           </p>
         </Section>
-      </main>
+      </div>
 
       <AnimatePresence>
         {modal && (
@@ -300,6 +287,8 @@ export default function App() {
               role="dialog"
               aria-modal="true"
               aria-label="Confirmar contabilización"
+              ref={panelModal as React.RefObject<HTMLDivElement>}
+              tabIndex={-1}
               className="relative w-full max-w-sm rounded-lg border border-line bg-surface-raised p-5 shadow-overlay"
               /* Nunca desde scale(0): nada en el mundo real aparece de la nada. */
               initial={{ opacity: 0, scale: reduce ? 1 : 0.96, y: reduce ? 0 : 6 }}
