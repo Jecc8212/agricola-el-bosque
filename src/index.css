@@ -1,4 +1,284 @@
 @import 'tailwindcss';
 
-/* Los design tokens de Agrícola El Bosque van aquí (@theme).
-   Pendiente: fase de design system. */
+/* Modo oscuro por clase: en un ERP que se usa 8 horas al día, la preferencia
+   la elige la persona, no el sistema operativo. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ══════════════════════════════════════════════════════════════════════════
+   AGRÍCOLA EL BOSQUE · Design tokens
+   Estilo: Data-Dense Dashboard. Instrumento de precisión, no vitrina.
+   Todo contraste declarado aquí está verificado contra WCAG 2.1 AA.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── Paleta cruda ────────────────────────────────────────────────────────
+     Tres familias y nada más. Cada una tiene un trabajo asignado.          */
+
+  /* Verde Bosque — institucional. El nombre de la empresa, hecho color.
+     Desaturado a propósito: un verde brillante en pantalla ocho horas cansa. */
+  --color-bosque-50:  #f1f5f2;
+  --color-bosque-100: #dee8e1;
+  --color-bosque-200: #bdd1c3;
+  --color-bosque-300: #93b3a0;
+  --color-bosque-400: #68907a;
+  --color-bosque-500: #4a7360;
+  --color-bosque-600: #395c4c;
+  --color-bosque-700: #2e4a3e;
+  --color-bosque-800: #253a31;
+  --color-bosque-900: #1d2e27;
+  --color-bosque-950: #121c18;
+
+  /* Ocre Cosecha — acento. Atención sin alarma: avisos, destacados, pendientes. */
+  --color-ocre-50:  #fdf8ed;
+  --color-ocre-100: #f8ecd0;
+  --color-ocre-200: #f0d79e;
+  --color-ocre-300: #e5bc66;
+  --color-ocre-400: #d9a03c;
+  --color-ocre-500: #c08526;
+  --color-ocre-600: #a06b1d;
+  --color-ocre-700: #7d521a;
+  --color-ocre-800: #5e3e17;
+  --color-ocre-900: #4a3214;
+
+  /* Cereza — el fruto de la casa, reservado para lo negativo.
+     Errores, descuadres, saldos en contra, acciones destructivas. Nunca decorativo. */
+  --color-cereza-50:  #fcf2f3;
+  --color-cereza-100: #f8dfe1;
+  --color-cereza-200: #f0bec3;
+  --color-cereza-300: #e2919a;
+  --color-cereza-400: #ce6270;
+  --color-cereza-500: #b33f50;
+  --color-cereza-600: #942f41;
+  --color-cereza-700: #782635;
+  --color-cereza-800: #601f2c;
+  --color-cereza-900: #4e1b26;
+
+  /* Neutros cálidos — papel, no acero. Una empresa agrícola no es un banco. */
+  --color-papel-0:   #ffffff;
+  --color-papel-50:  #faf9f6;
+  --color-papel-100: #f4f2ed;
+  --color-papel-150: #edeae3;
+  --color-papel-200: #e3dfd5;
+  --color-papel-300: #cfcabc;
+  --color-papel-400: #a9a395;
+  --color-papel-500: #837d6f;
+  --color-papel-600: #666055;
+  --color-papel-700: #4c473e;
+  --color-papel-800: #33302a;
+  --color-papel-900: #201e1a;
+  --color-papel-950: #141310;
+
+  /* ── Roles semánticos ────────────────────────────────────────────────────
+     Apuntan a variables de runtime para poder invertirse en modo oscuro.   */
+  --color-canvas:        var(--c-canvas);
+  --color-surface:       var(--c-surface);
+  --color-surface-sunken: var(--c-surface-sunken);
+  --color-surface-raised: var(--c-surface-raised);
+  --color-line:          var(--c-line);
+  --color-line-strong:   var(--c-line-strong);
+
+  --color-ink:        var(--c-ink);
+  --color-ink-muted:  var(--c-ink-muted);
+  --color-ink-faint:  var(--c-ink-faint);
+  --color-ink-disabled: var(--c-ink-disabled);
+  --color-ink-invert: var(--c-ink-invert);
+
+  --color-primary:       var(--c-primary);
+  --color-primary-hover: var(--c-primary-hover);
+  --color-primary-tint:  var(--c-primary-tint);
+  --color-primary-text:  var(--c-primary-text);
+  --color-on-primary:    var(--c-on-primary);
+  --color-on-danger:     var(--c-on-danger);
+
+  --color-success:      var(--c-success);
+  --color-success-tint: var(--c-success-tint);
+  --color-success-text: var(--c-success-text);
+  --color-warning:      var(--c-warning);
+  --color-warning-tint: var(--c-warning-tint);
+  --color-warning-text: var(--c-warning-text);
+  --color-danger:       var(--c-danger);
+  --color-danger-hover: var(--c-danger-hover);
+  --color-danger-tint:  var(--c-danger-tint);
+  --color-danger-text:  var(--c-danger-text);
+
+  /* ── Tipografía ──────────────────────────────────────────────────────────
+     Fira Sans para todo lo que se lee; Fira Mono para todo lo que se coteja
+     (códigos de cuenta, IDs, RUT). Ligaduras jamás: un código no es prosa.  */
+  --font-sans: 'Fira Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Fira Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* Escala densa: base 14px. Es una herramienta de escritorio, no una landing. */
+  --text-2xs: 0.6875rem;   --text-2xs--line-height: 1rem;      /* 11 · micro-labels    */
+  --text-xs:  0.75rem;     --text-xs--line-height: 1rem;       /* 12 · cabeceras tabla */
+  --text-sm:  0.8125rem;   --text-sm--line-height: 1.25rem;    /* 13 · filas densas    */
+  --text-base:0.875rem;    --text-base--line-height: 1.375rem; /* 14 · UI por defecto  */
+  --text-lg:  1rem;        --text-lg--line-height: 1.5rem;     /* 16 · lectura larga   */
+  --text-xl:  1.125rem;    --text-xl--line-height: 1.625rem;   /* 18 · título sección  */
+  --text-2xl: 1.375rem;    --text-2xl--line-height: 1.875rem;  /* 22 · título página   */
+  --text-3xl: 1.75rem;     --text-3xl--line-height: 2.25rem;   /* 28 · cifra destacada */
+
+  /* ── Radios ──────────────────────────────────────────────────────────────
+     Contenidos. Una tabla contable con esquinas de 16px parece un juguete.  */
+  --radius-xs: 0.125rem;  /* 2  · chips, badges        */
+  --radius-sm: 0.25rem;   /* 4  · inputs, botones      */
+  --radius-md: 0.375rem;  /* 6  · cards, dropdowns     */
+  --radius-lg: 0.5rem;    /* 8  · modales, paneles     */
+  --radius-xl: 0.75rem;   /* 12 · sólo contenedores    */
+
+  /* ── Sombras ─────────────────────────────────────────────────────────────
+     Tintadas con el neutro cálido, nunca negro puro: el negro sobre papel
+     crema se ve sucio.                                                     */
+  --shadow-xs:      0 1px 2px 0 rgb(32 30 26 / 0.05);
+  --shadow-sm:      0 1px 3px 0 rgb(32 30 26 / 0.07), 0 1px 2px -1px rgb(32 30 26 / 0.04);
+  --shadow-md:      0 4px 8px -2px rgb(32 30 26 / 0.08), 0 2px 4px -2px rgb(32 30 26 / 0.05);
+  --shadow-lg:      0 12px 24px -6px rgb(32 30 26 / 0.12), 0 4px 8px -4px rgb(32 30 26 / 0.06);
+  --shadow-overlay: 0 16px 32px -8px rgb(32 30 26 / 0.16), 0 6px 12px -6px rgb(32 30 26 / 0.08);
+
+  /* ── Motion ──────────────────────────────────────────────────────────────
+     Curvas fuertes: las de CSS por defecto no tienen carácter.
+     Regla dura: nada por encima de 300ms, y jamás ease-in en UI.           */
+  --ease-out:    cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ── Densidad de fila ────────────────────────────────────────────────────*/
+  --spacing-row-sm: 1.75rem;  /* 28 · máxima densidad  */
+  --spacing-row-md: 2rem;     /* 32 · por defecto      */
+  --spacing-row-lg: 2.5rem;   /* 40 · táctil / móvil   */
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Valores de runtime
+   ══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --c-canvas:         #faf9f6;
+  --c-surface:        #ffffff;
+  --c-surface-sunken: #f4f2ed;
+  --c-surface-raised: #ffffff;
+  --c-line:           #e3dfd5;  /* separador decorativo */
+  --c-line-strong:    #837d6f;  /* borde de control · 4.10:1 */
+
+  --c-ink:          #201e1a;  /* 16.64:1 */
+  --c-ink-muted:    #4c473e;  /*  8.76:1 */
+  --c-ink-faint:    #666055;  /*  6.23:1 — piso para texto */
+  --c-ink-disabled: #a9a395;  /* exento: sólo deshabilitado */
+  --c-ink-invert:   #ffffff;
+
+  --c-primary:       #395c4c;  /* blanco encima · 7.48:1 */
+  --c-primary-hover: #2e4a3e;
+  --c-on-primary:    #ffffff;
+  --c-on-danger:     #ffffff;
+  --c-primary-tint:  #dee8e1;
+  --c-primary-text:  #2e4a3e;  /*  9.70:1 */
+
+  --c-success:      #395c4c;
+  --c-success-tint: #dee8e1;
+  --c-success-text: #253a31;  /*  9.68:1 sobre su tinte */
+  --c-warning:      #c08526;
+  --c-warning-tint: #f8ecd0;
+  --c-warning-text: #4a3214;  /* 10.19:1 sobre su tinte */
+  --c-danger:       #942f41;  /* blanco encima · 7.66:1 */
+  --c-danger-hover: #782635;
+  --c-danger-tint:  #f8dfe1;
+  --c-danger-text:  #601f2c;  /*  9.62:1 sobre su tinte */
+
+  --focus-ring: #395c4c;
+}
+
+.dark {
+  --c-canvas:         #14170f;
+  --c-surface:        #1b1f17;
+  --c-surface-sunken: #101309;
+  --c-surface-raised: #242920;
+  --c-line:           #2e3429;
+  --c-line-strong:    #6e7861;  /* 3.60:1 sobre surface */
+
+  --c-ink:          #e8eae2;  /* 13.78:1 */
+  --c-ink-muted:    #b4b9aa;  /*  8.34:1 */
+  --c-ink-faint:    #8d9384;  /*  5.29:1 */
+  --c-ink-disabled: #5c6553;
+  --c-ink-invert:   #14170f;
+
+  --c-primary:       #4a7360;  /* relleno · blanco encima 5.37:1 · 3.12:1 vs surface */
+  --c-primary-hover: #517b68;  /* blanco encima 4.79:1 */
+  --c-on-primary:    #ffffff;
+  --c-on-danger:     #ffffff;
+  --c-primary-tint:  #1d2e27;
+  --c-primary-text:  #93b3a0;  /*  7.33:1 */
+
+  --c-success:      #93b3a0;
+  --c-success-tint: #1d2e27;
+  --c-success-text: #93b3a0;  /*  6.25:1 sobre su tinte */
+  --c-warning:      #e5bc66;
+  --c-warning-tint: #4a3214;
+  --c-warning-text: #e5bc66;  /*  6.67:1 sobre su tinte */
+  --c-danger:       #b84556;  /* relleno · blanco encima 5.22:1 · 3.21:1 vs surface */
+  --c-danger-hover: #c24e5e;  /* blanco encima 4.62:1 */
+  --c-danger-tint:  #4e1b26;
+  --c-danger-text:  #e2919a;  /*  5.80:1 sobre su tinte */
+
+  --focus-ring: #68907a;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Base
+   ══════════════════════════════════════════════════════════════════════════ */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Cifras tabulares en todo el sistema. En una app donde cada pantalla es
+     una columna de montos, que los dígitos no se alineen es un defecto. */
+  table, .num, input[type='number'], time, code, kbd {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  /* Un código de cuenta no lleva ligaduras. */
+  code, kbd, pre, .mono {
+    font-family: var(--font-mono);
+    font-variant-ligatures: none;
+  }
+
+  /* Foco visible y uniforme. Es la única affordance de quien no usa mouse. */
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+
+  ::selection {
+    background-color: var(--color-primary-tint);
+    color: var(--color-ink);
+  }
+
+  /* iOS hace zoom en cualquier input bajo 16px. En móvil se sube, sin excepción. */
+  @media (max-width: 767px) {
+    input, select, textarea { font-size: 1rem; }
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Motion reducido
+   No es apagar todo: se conserva lo que comunica (opacidad, color) y se
+   elimina lo que desplaza. Quien marca esta preferencia suele tener una razón.
+   ══════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
