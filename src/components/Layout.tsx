@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { cn } from '@/lib/cn'
+import { FranjaContexto } from '@/components/FranjaContexto'
 
 interface SubItem { to: string; label: string; desc: string }
 
@@ -160,7 +161,7 @@ export function Layout() {
       </a>
 
       <header className="sticky top-0 z-20 border-b border-line bg-canvas/90 backdrop-blur-sm">
-        <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:gap-6 sm:px-6">
+        <div className="mx-auto flex min-h-14 max-w-7xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 sm:gap-x-5 sm:px-6 lg:flex-nowrap lg:py-0">
           <NavLink to="/" className="shrink-0 truncate text-base font-semibold tracking-tight">
             Agrícola El Bosque
           </NavLink>
@@ -173,9 +174,13 @@ export function Layout() {
             </NavLink>
           </nav>
 
+          <div className="order-last w-full border-t border-line pt-2 lg:order-none lg:ml-auto lg:w-auto lg:border-0 lg:pt-0">
+            <FranjaContexto />
+          </div>
+
           <button
             onClick={() => setOscuro((o) => !o)}
-            className="ml-auto inline-flex h-8 shrink-0 cursor-pointer items-center whitespace-nowrap rounded-sm border border-line-strong px-2.5 text-xs font-medium transition-colors duration-150 ease-out hover:bg-surface-sunken"
+            className="ml-auto inline-flex h-8 shrink-0 lg:ml-0 cursor-pointer items-center whitespace-nowrap rounded-sm border border-line-strong px-2.5 text-xs font-medium transition-colors duration-150 ease-out hover:bg-surface-sunken"
           >
             {oscuro ? 'Claro' : 'Oscuro'}
           </button>

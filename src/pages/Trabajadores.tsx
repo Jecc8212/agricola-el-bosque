@@ -10,7 +10,9 @@ import { cn } from '@/lib/cn'
 import { CLP, antiguedad, fecha } from '@/lib/formato'
 import { formatearRut } from '@/lib/rut'
 import { useDialogo } from '@/lib/useDialogo'
-import { CAMPOS, CAMPO_LABEL, nombreCompleto } from '@/lib/types'
+import { useContextoOperacion } from '@/lib/contexto'
+import { finDeMes, etiquetaTemporada } from '@/lib/temporada'
+import { CAMPO_LABEL, nombreCompleto } from '@/lib/types'
 import type { EstadoTrabajador, Trabajador } from '@/lib/types'
 
 const ESTADO_TONO: Record<EstadoTrabajador, 'success' | 'warning' | 'neutral'> = {
@@ -136,16 +138,25 @@ function FichaTrabajador({ t, onCerrar }: { t: Trabajador; onCerrar: () => void 
 }
 
 export default function Trabajadores() {
+  const { temporada, mes, campo } = useContextoOperacion()
   const [busqueda, setBusqueda] = useState('')
-  const [campo, setCampo] = useState<string>('TODOS')
   const [estado, setEstado] = useState<string>('ACTIVO')
   const [seleccionado, setSeleccionado] = useState<Trabajador | null>(null)
   const cerrarFicha = useCallback(() => setSeleccionado(null), [])
 
+  /* El contexto de la cabecera acota la nómina antes que cualquier filtro de
+     esta página: sólo quien ya había ingresado al cierre del mes seleccionado,
+     y sólo el campo elegido. */
+  const enContexto = useMemo(() => {
+    const corte = finDeMes(mes)
+    return TRABAJADORES.filter(
+      (t) => (campo === 'TODOS' || t.campo === campo) && t.fechaIngreso <= corte,
+    )
+  }, [campo, mes])
+
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase().replace(/[.\-\s]/g, '')
-    return TRABAJADORES.filter((t) => {
-      if (campo !== 'TODOS' && t.campo !== campo) return false
+    return enContexto.filter((t) => {
       if (estado !== 'TODOS' && t.estado !== estado) return false
       if (!q) return true
       return (
@@ -153,11 +164,12 @@ export default function Trabajadores() {
         t.rut.toLowerCase().includes(q)
       )
     })
-  }, [busqueda, campo, estado])
+  }, [busqueda, enContexto, estado])
 
-  const activos = TRABAJADORES.filter((t) => t.estado === 'ACTIVO')
+  const activos = enContexto.filter((t) => t.estado === 'ACTIVO')
   const masaSalarial = activos.reduce((s, t) => s + t.sueldoBase, 0)
   const agricolas = activos.filter((t) => CARGO_POR_CODIGO.get(t.cargo)?.tipo === 'AGRICOLA').length
+  const alcance = campo === 'TODOS' ? 'los cuatro campos' : CAMPO_LABEL[campo]
 
   return (
     <>
@@ -173,10 +185,14 @@ export default function Trabajadores() {
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Metrica label="DOTACIÓN ACTIVA" valor={String(activos.length)} nota={`de ${TRABAJADORES.length} en el registro`} />
+        <Metrica label="DOTACIÓN ACTIVA" valor={String(activos.length)} nota={`de ${enContexto.length} en el contexto`} />
         <Metrica label="AGRÍCOLAS" valor={String(agricolas)} nota={`${activos.length - agricolas} administrativos`} />
         <Metrica label="MASA SALARIAL BASE" valor={CLP.format(masaSalarial)} nota="mensual, sin leyes sociales" />
-        <Metrica label="CAMPOS" valor="4" nota="más dotación general" />
+        <Metrica
+          label="ALCANCE"
+          valor={campo === 'TODOS' ? '4 campos' : CAMPO_LABEL[campo]}
+          nota={`temporada ${etiquetaTemporada(temporada)}`}
+        />
       </div>
 
       <div className="mt-6 flex flex-wrap items-end gap-3">
@@ -188,12 +204,6 @@ export default function Trabajadores() {
             onChange={(e) => setBusqueda(e.target.value)}
           />
         </div>
-        <Select label="CAMPO" value={campo} onChange={(e) => setCampo(e.target.value)}>
-          <option value="TODOS">Todos</option>
-          {CAMPOS.map((c) => (
-            <option key={c} value={c}>{CAMPO_LABEL[c]}</option>
-          ))}
-        </Select>
         <Select label="ESTADO" value={estado} onChange={(e) => setEstado(e.target.value)}>
           <option value="ACTIVO">Activos</option>
           <option value="LICENCIA">En licencia</option>
@@ -203,7 +213,8 @@ export default function Trabajadores() {
       </div>
 
       <p aria-live="polite" className="mt-3 text-2xs text-ink-faint">
-        {filtrados.length} {filtrados.length === 1 ? 'trabajador' : 'trabajadores'}
+        {filtrados.length} {filtrados.length === 1 ? 'trabajador' : 'trabajadores'} · {alcance} ·
+        con ingreso hasta el cierre del mes seleccionado
       </p>
 
       <div className="mt-2 overflow-x-auto rounded-md border border-line bg-surface">
@@ -259,13 +270,13 @@ export default function Trabajadores() {
           <div className="px-4 py-14 text-center">
             <p className="text-base font-medium">Sin resultados</p>
             <p className="mt-1 text-sm text-ink-faint">
-              Ningún trabajador coincide con esos filtros.
+              Ningún trabajador coincide. Revisa también el contexto de la cabecera:
+              temporada, mes y campo acotan la nómina antes que estos filtros.
             </p>
             <div className="mt-4">
               <Button
                 onClick={() => {
                   setBusqueda('')
-                  setCampo('TODOS')
                   setEstado('TODOS')
                 }}
               >
