@@ -1,14 +1,21 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { RouterProvider } from 'react-router-dom'
+import { ProveedorMaestros } from '@/lib/maestros'
 import { ProveedorContexto } from '@/lib/contexto'
-import { router } from '@/router'
+import { ProveedorAuth } from '@/lib/auth'
+import { Puerta } from '@/Puerta'
 import '@/index.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ProveedorContexto>
-      <RouterProvider router={router} />
-    </ProveedorContexto>
+    {/* Los maestros van por fuera: el contexto de filtros se apoya en ellos
+        para resolver nombres y descartar selecciones ya eliminadas. */}
+    <ProveedorMaestros>
+      <ProveedorAuth>
+        <ProveedorContexto>
+          <Puerta />
+        </ProveedorContexto>
+      </ProveedorAuth>
+    </ProveedorMaestros>
   </StrictMode>,
 )

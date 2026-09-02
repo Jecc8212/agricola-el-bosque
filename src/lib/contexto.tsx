@@ -1,26 +1,31 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { TEMPORADAS, mesesDeTemporada } from '@/lib/temporada'
-import type { Temporada } from '@/lib/temporada'
-import type { Campo } from '@/lib/types'
+import { buscarNodo, useMaestros } from '@/lib/maestros'
+import { useAuth } from '@/lib/auth'
 
-export type CampoSeleccion = Campo | 'TODOS'
+export const TODOS = 'TODOS'
 
 interface Contexto {
-  temporada: Temporada
-  mes: string
-  campo: CampoSeleccion
-  setTemporada: (t: Temporada) => void
-  setMes: (m: string) => void
-  setCampo: (c: CampoSeleccion) => void
+  temporadaId: string
+  campoId: string
+  centroCostoId: string
+  setTemporadaId: (v: string) => void
+  setCampoId: (v: string) => void
+  setCentroCostoId: (v: string) => void
+  /** Nombres ya resueltos, para no repetir la búsqueda en cada pantalla. */
+  temporadaNombre: string
+  campoNombre: string
+  centroCostoNombre: string
+  /** Verdadero cuando el campo lo impone el perfil y no se puede cambiar. */
+  campoBloqueado: boolean
 }
 
-const ContextoOperacion = createContext<Contexto | null>(null)
+const Ctx = createContext<Contexto | null>(null)
 const CLAVE = 'aeb.contexto'
 
-/** Se recuerda entre sesiones: nadie quiere volver a elegir su campo y su mes
- *  cada vez que abre el sistema. Si el navegador lo bloquea, no pasa nada. */
-function leerGuardado(): Partial<Contexto> {
+/** Se recuerda entre sesiones: nadie quiere volver a elegir su campo cada vez
+ *  que abre el sistema. Si el navegador lo bloquea, no pasa nada. */
+function leer(): Record<string, string> {
   try {
     return JSON.parse(localStorage.getItem(CLAVE) ?? '{}')
   } catch {
@@ -28,74 +33,64 @@ function leerGuardado(): Partial<Contexto> {
   }
 }
 
-function guardar(v: { temporada: string; mes: string; campo: string }) {
-  try {
-    localStorage.setItem(CLAVE, JSON.stringify(v))
-  } catch {
-    /* modo privado o almacenamiento bloqueado: seguimos igual */
-  }
-}
-
+/**
+ * Contexto de operación, no filtros de página. Temporada, campo y centro de
+ * costo acotan todo el sistema a la vez, y los tres salen de maestros
+ * editables: lo que se filtra es exactamente lo que la empresa cargó.
+ */
 export function ProveedorContexto({ children }: { children: ReactNode }) {
-  const guardado = leerGuardado()
-  const temporadaInicial = (
-    TEMPORADAS.includes(guardado.temporada as Temporada)
-      ? guardado.temporada
-      : TEMPORADAS[TEMPORADAS.length - 1]
-  ) as Temporada
+  const { maestros } = useMaestros()
+  const { sesion } = useAuth()
+  const guardado = leer()
 
-  const [temporada, setTemporadaEstado] = useState<Temporada>(temporadaInicial)
-  const [mes, setMesEstado] = useState<string>(() => {
-    const meses = mesesDeTemporada(temporadaInicial)
-    const valido = meses.some((m) => m.valor === guardado.mes)
-    return valido ? (guardado.mes as string) : meses[0].valor
-  })
-  const [campo, setCampoEstado] = useState<CampoSeleccion>(
-    (guardado.campo as CampoSeleccion) ?? 'TODOS',
-  )
+  const [temporadaId, setTemporadaId] = useState(() => guardado.temporadaId ?? TODOS)
+  const [campoId, setCampoIdEstado] = useState(() => guardado.campoId ?? TODOS)
 
-  /** Al cambiar de temporada, el mes elegido deja de existir: se reencuadra
-   *  al mismo mes de la nueva temporada en vez de quedar en un estado inválido. */
-  const setTemporada = useCallback(
-    (t: Temporada) => {
-      setTemporadaEstado(t)
-      setMesEstado((mesActual) => {
-        const posicion = mesesDeTemporada(temporada).findIndex((m) => m.valor === mesActual)
-        const meses = mesesDeTemporada(t)
-        const nuevo = meses[posicion >= 0 ? posicion : 0].valor
-        guardar({ temporada: t, mes: nuevo, campo })
-        return nuevo
-      })
+  /* Un perfil acotado a un campo no elige: su campo manda sobre lo guardado. */
+  const campoBloqueado = Boolean(sesion?.campoId)
+  const campoEfectivo = sesion?.campoId ?? campoId
+  const setCampoId = useCallback(
+    (v: string) => {
+      if (!campoBloqueado) setCampoIdEstado(v)
     },
-    [temporada, campo],
+    [campoBloqueado],
+  )
+  const [centroCostoId, setCentroCostoId] = useState(() => guardado.centroCostoId ?? TODOS)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CLAVE, JSON.stringify({ temporadaId, campoId, centroCostoId }))
+    } catch {
+      /* almacenamiento bloqueado */
+    }
+  }, [temporadaId, campoId, centroCostoId])
+
+  /* Si alguien borra del maestro el elemento que estaba seleccionado, el filtro
+     vuelve a "todos" en vez de quedar apuntando a algo que ya no existe. */
+  useEffect(() => {
+    if (temporadaId !== TODOS && !buscarNodo(maestros.temporadas, temporadaId)) setTemporadaId(TODOS)
+    if (campoId !== TODOS && !buscarNodo(maestros.campos, campoId)) setCampoIdEstado(TODOS)
+    if (centroCostoId !== TODOS && !buscarNodo(maestros.centrosCosto, centroCostoId))
+      setCentroCostoId(TODOS)
+  }, [maestros, temporadaId, campoId, centroCostoId])
+
+  const valor = useMemo<Contexto>(
+    () => ({
+      temporadaId, campoId: campoEfectivo, centroCostoId,
+      setTemporadaId, setCampoId, setCentroCostoId,
+      temporadaNombre: buscarNodo(maestros.temporadas, temporadaId)?.nombre ?? 'Todas',
+      campoNombre: buscarNodo(maestros.campos, campoEfectivo)?.nombre ?? 'Todos',
+      centroCostoNombre: buscarNodo(maestros.centrosCosto, centroCostoId)?.nombre ?? 'Todos',
+      campoBloqueado,
+    }),
+    [maestros, temporadaId, campoId, campoEfectivo, campoBloqueado, setCampoId, centroCostoId],
   )
 
-  const setMes = useCallback(
-    (m: string) => {
-      setMesEstado(m)
-      guardar({ temporada, mes: m, campo })
-    },
-    [temporada, campo],
-  )
-
-  const setCampo = useCallback(
-    (c: CampoSeleccion) => {
-      setCampoEstado(c)
-      guardar({ temporada, mes, campo: c })
-    },
-    [temporada, mes],
-  )
-
-  const valor = useMemo(
-    () => ({ temporada, mes, campo, setTemporada, setMes, setCampo }),
-    [temporada, mes, campo, setTemporada, setMes, setCampo],
-  )
-
-  return <ContextoOperacion.Provider value={valor}>{children}</ContextoOperacion.Provider>
+  return <Ctx.Provider value={valor}>{children}</Ctx.Provider>
 }
 
 export function useContextoOperacion() {
-  const c = useContext(ContextoOperacion)
+  const c = useContext(Ctx)
   if (!c) throw new Error('useContextoOperacion debe usarse dentro de ProveedorContexto')
   return c
 }
