@@ -9,16 +9,26 @@ type Seccion = { clave: string; titulo: string; items: Array<{ to: string; label
    modalidad de asistencia imputa a una cuenta, y el cargo también. */
 const SECCIONES: Seccion[] = [
   { clave: 'home', titulo: 'Inicio', items: [{ to: '/', label: 'Home' }] },
-  { clave: 'cuentas', titulo: 'Cuentas', items: [{ to: '/cuentas', label: 'Master de cuentas' }] },
+  {
+    clave: 'cuentas',
+    titulo: 'Contabilidad',
+    items: [
+      { to: '/cuentas', label: 'Master de cuentas' },
+      { to: '/indicadores', label: 'Indicadores' },
+    ],
+  },
+  {
+    clave: 'pasar-lista',
+    titulo: 'Jornada',
+    items: [{ to: '/rrhh/tomar-asistencia', label: 'Tomar asistencia' }],
+  },
   {
     clave: 'rrhh',
     titulo: 'Recursos humanos',
     items: [
       { to: '/rrhh/trabajadores', label: 'Trabajadores' },
-      { to: '/rrhh/tomar-asistencia', label: 'Tomar asistencia' },
       { to: '/rrhh/asistencia', label: 'Asistencia' },
-      { to: '/rrhh/tarja', label: 'Tarja' },
-      { to: '/rrhh/semillas', label: 'Semillas' },
+      { to: '/rrhh/sueldos', label: 'Sueldos' },
     ],
   },
   {
@@ -26,6 +36,7 @@ const SECCIONES: Seccion[] = [
     titulo: 'Maestros',
     items: [
       { to: '/maestros/labores', label: 'Labores' },
+      { to: '/maestros/especies', label: 'Especies y variedades' },
       { to: '/maestros/centros-costo', label: 'Centros de costo' },
       { to: '/maestros/campos', label: 'Campos' },
       { to: '/maestros/temporadas', label: 'Temporadas' },

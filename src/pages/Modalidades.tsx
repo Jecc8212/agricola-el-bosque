@@ -5,15 +5,27 @@ import type { CampoForm } from '@/components/ui/FormularioModal'
 import { aplanar, rutaDe, useMaestros } from '@/lib/maestros'
 import type { Nodo } from '@/lib/maestros'
 
+/** Las únicas fracciones con las que se liquida una jornada. */
+const VALORES = [
+  { valor: '1', etiqueta: '1 · día completo' },
+  { valor: '0.75', etiqueta: '0,75 · tres cuartos de día' },
+  { valor: '0.5', etiqueta: '0,5 · medio día' },
+  { valor: '0', etiqueta: '0 · no se paga' },
+]
+
+const ETIQUETA_VALOR: Record<string, string> = {
+  '1': 'Día completo',
+  '0.75': 'Tres cuartos',
+  '0.5': 'Medio día',
+  '0': 'No se paga',
+}
+
 /**
- * La modalidad es la bisagra entre la asistencia y la contabilidad. Lleva dos
- * datos y ninguno es decorativo:
+ * La modalidad dice **qué parte del día se paga**.
  *
- *   · el **factor**, cuánto suma esa jornada al día del trabajador. Una falta
- *     va en 0: queda registrada —hay que saber que faltó— pero no cuenta como
- *     día trabajado en la liquidación.
- *   · la **cuenta**, a qué nodo del master imputa. Sin ella el registro existe
- *     pero no llega a la contabilidad.
+ * Su valor es un factor sobre la remuneración diaria, no un número libre: un
+ * día completo vale 1, tres cuartos 0,75, media jornada 0,5, y una falta 0. De
+ * ahí sale directo lo que se le liquida a cada persona.
  */
 export default function Modalidades() {
   const { maestros } = useMaestros()
@@ -21,9 +33,17 @@ export default function Modalidades() {
 
   const camposExtra = (n?: Nodo): CampoForm[] => [
     {
-      tipo: 'numero', id: 'factor', etiqueta: 'Factor de día', valor: n?.factor ?? 1,
-      paso: '0.5', min: '0',
-      ayuda: 'Cuánto suma al día del trabajador: 1 día completo, 0.5 media jornada, 0 no cuenta (faltas y licencias).',
+      tipo: 'select', id: 'factor', etiqueta: 'Valor de la jornada',
+      valor: String(n?.factor ?? 1),
+      opciones: VALORES,
+    },
+    {
+      tipo: 'select', id: 'porTrato', etiqueta: '¿Se paga a trato?',
+      valor: n?.porTrato ? 'si' : 'no',
+      opciones: [
+        { valor: 'no', etiqueta: 'No — se paga por día' },
+        { valor: 'si', etiqueta: 'Sí — se paga por producción' },
+      ],
     },
     {
       tipo: 'select', id: 'cuentaId', etiqueta: 'Imputa a la cuenta', valor: n?.cuentaId ?? '',
@@ -40,7 +60,7 @@ export default function Modalidades() {
   return (
     <Pagina
       titulo="Modalidades"
-      descripcion="Los tipos de jornada que se registran en asistencia, con subcategorías propias. Cada una declara cuánto suma al día del trabajador y a qué cuenta imputa. Las que suman cero —faltas, licencias, permisos sin goce— son las que se ofrecen al justificar una ausencia."
+      descripcion="Qué parte del día se paga en cada tipo de jornada. El valor es un factor sobre la remuneración diaria: 1 es un día completo, 0,75 tres cuartos, 0,5 media jornada y 0 no se paga. Las de valor 0 son las que se ofrecen al justificar una ausencia."
     >
       <EditorArbol
         catalogo="modalidades"
@@ -49,41 +69,31 @@ export default function Modalidades() {
         mostrarCodigo
         camposExtra={camposExtra}
         columnaExtra={{
-          titulo: 'DÍA E IMPUTACIÓN',
+          titulo: 'VALOR',
           render: (n) => {
             const factor = n.factor ?? 0
             const cuenta = rutaDe(maestros.cuentas, n.cuentaId)
             return (
               <div className="flex flex-col items-start gap-0.5">
-                {factor > 0 ? (
-                  <span className="num text-sm font-medium">
-                    Suma {factor} {factor === 1 ? 'día' : 'días'}
+                <span className="flex items-baseline gap-2">
+                  <span className="num text-lg font-semibold tracking-tight">
+                    {factor.toLocaleString('es-CL', { minimumFractionDigits: factor % 1 ? 2 : 0 })}
                   </span>
-                ) : (
-                  <Chip tone="warning">No suma día</Chip>
-                )}
+                  <span className="text-2xs text-ink-faint">
+                    {ETIQUETA_VALOR[String(factor)] ?? 'valor propio'}
+                  </span>
+                </span>
+                {n.porTrato && <Chip tone="primary">A trato · por producción</Chip>}
                 {cuenta ? (
                   <span className="text-2xs text-ink-faint">{cuenta}</span>
                 ) : (
                   <Chip tone="warning">Sin imputar</Chip>
                 )}
-                {/* Sin marcas nuevas: que sume cero ya significa que es una
-                    ausencia, y es lo que la usa el asistente de asistencia. */}
-                {factor === 0 && <Chip tone="neutral">Sirve para justificar</Chip>}
               </div>
             )
           },
         }}
       />
-
-      {cuentas.length === 0 && (
-        <div className="mt-4 rounded-md border border-line bg-warning-tint px-3.5 py-3">
-          <p className="text-base text-warning-text">
-            Todavía no hay cuentas que enlazar. Carga primero el <strong>Master de cuentas</strong>{' '}
-            y vuelve a editar cada modalidad para imputarla.
-          </p>
-        </div>
-      )}
     </Pagina>
   )
 }

@@ -4,6 +4,17 @@
  * agrega un campo nuevo, no hay que tocar el código.
  */
 export type TipoTrabajador = 'AGRICOLA' | 'ADMINISTRATIVO'
+
+/**
+ * Agrícola o de planta. Decide cómo se le calcula el sueldo: al agrícola se le
+ * paga por día trabajado con tope de 30, al de planta por mes corrido.
+ */
+export type ClaseTrabajador = 'AGRICOLA' | 'PLANTA'
+
+export const CLASE_LABEL: Record<ClaseTrabajador, string> = {
+  AGRICOLA: 'Trabajador agrícola',
+  PLANTA: 'Trabajador de planta',
+}
 export type EstadoTrabajador = 'ACTIVO' | 'FINIQUITADO' | 'LICENCIA'
 
 /** Cada cargo apunta a una cuenta del plan financiero. Ése es el puente entre
@@ -34,6 +45,8 @@ export interface Trabajador {
    * persona llegue al lugar que lo consume, y no a un saco general.
    */
   centroCostoId?: string
+  /** Agrícola o de planta: cambia por completo el cálculo del sueldo. */
+  clase?: ClaseTrabajador
   estado: EstadoTrabajador
   fechaIngreso: string
   sueldoBase: number

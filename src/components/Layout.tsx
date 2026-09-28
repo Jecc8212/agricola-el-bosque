@@ -7,7 +7,7 @@ import { Marca } from '@/components/Marca'
 import { nombreRol, useAuth } from '@/lib/auth'
 
 /** Rutas donde la franja de filtros no pinta nada. */
-const SIN_FILTROS = new Set(['/', '/sistema/usuarios'])
+const SIN_FILTROS = new Set(['/sistema/usuarios'])
 
 export function Layout() {
   const { pathname } = useLocation()

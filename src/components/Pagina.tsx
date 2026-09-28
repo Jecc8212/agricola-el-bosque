@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Aparece } from '@/components/Aparece'
 
 /** Encabezado común: título, para qué sirve la pantalla, y sus acciones. */
 export function Pagina({
@@ -11,7 +12,7 @@ export function Pagina({
 }) {
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <Aparece className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{titulo}</h1>
           {descripcion && (
@@ -19,7 +20,7 @@ export function Pagina({
           )}
         </div>
         {acciones}
-      </div>
+      </Aparece>
       <div className="mt-6">{children}</div>
     </>
   )

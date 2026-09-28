@@ -8,17 +8,42 @@ import type { Trabajador } from '@/lib/types'
  * extra usan. Un motor, cinco maestros: si mañana aparece un sexto, no hay
  * código nuevo que escribir.
  */
+/**
+ * Etapa de la planta. No es una etiqueta: decide a qué lado de la contabilidad
+ * va el gasto. En formación la planta es inversión —se capitaliza y se
+ * amortiza—; adulta ya produce, y su costo es operacional.
+ */
+export type EtapaPlanta = 'FORMACION' | 'ADULTA'
+
+export const ETAPA_LABEL: Record<EtapaPlanta, string> = {
+  FORMACION: 'Formación · inversión',
+  ADULTA: 'Adulta · producción',
+}
+
 export interface Nodo {
   id: string
   nombre: string
   codigo?: string
-  /** Modalidades: cuánto suma esta jornada al día del trabajador.
-   *  Una falta va en 0 — está presente en el registro, pero no cuenta como día. */
+  /**
+   * Modalidades: qué parte del día se paga. Es un factor sobre la remuneración
+   * diaria — 1 día completo, 0.75 tres cuartos, 0.5 media jornada, 0 nada—, no
+   * un número libre: son las únicas fracciones con las que se liquida.
+   */
   factor?: number
   /** Modalidades: a qué cuenta del master imputa. */
   cuentaId?: string
   /** Labores: incentivo que se paga por hacer esta labor. */
   bono?: number
+  /**
+   * Labores: lo que se paga por **unidad** cuando la jornada es a trato.
+   * Sin esto, «a trato» era una modalidad que pagaba igual que un día normal,
+   * que es justo lo que el trato no es.
+   */
+  precio?: number
+  /** Labores: en qué se mide el trato — bins, kilos, hileras, plantas. */
+  unidad?: string
+  /** Modalidades: la jornada se paga por producción, no por día. */
+  porTrato?: boolean
   /**
    * Centros de costo: a qué campo y a qué temporada pertenecen.
    *
@@ -28,11 +53,25 @@ export interface Nodo {
    */
   campoId?: string
   temporadaId?: string
+  /**
+   * Centros de costo: las coordenadas agrícolas del CCE. La ficha del maestro
+   * lo define como campo–especie–variedad–etapa, y sin ellas no hay forma de
+   * separar la inversión (formación) de la producción (adulta), ni de calcular
+   * un solo indicador por hectárea.
+   */
+  especieId?: string
+  variedadId?: string
+  etapa?: EtapaPlanta
+  /** Superficie productiva. Es el divisor de casi todos los indicadores. */
+  hectareas?: number
+  /** Plantas en el cuartel, para la densidad de plantación. */
+  plantas?: number
   hijos: Nodo[]
 }
 
 export type Catalogo =
   | 'cuentas' | 'centrosCosto' | 'campos' | 'temporadas' | 'modalidades' | 'labores'
+  | 'especies'
 
 export interface Maestros {
   cuentas: Nodo[]
@@ -41,6 +80,8 @@ export interface Maestros {
   temporadas: Nodo[]
   modalidades: Nodo[]
   labores: Nodo[]
+  /** Especie en el primer nivel, variedad en el segundo. */
+  especies: Nodo[]
 }
 
 /** Un registro de asistencia es un día de una persona. La liquidación de sueldo
@@ -59,6 +100,12 @@ export interface RegistroAsistencia {
   presente: boolean
   /** Firmó la entrega de su equipo de protección personal. */
   eppEntregado: boolean
+  /**
+   * Trato: cuántas unidades hizo ese día. El monto sale de multiplicarla por el
+   * precio de la labor, y de ahí salen los días equivalentes para semana
+   * corrida. En una jornada al día queda en cero y no se usa.
+   */
+  tratoCantidad?: number
   /** Jornada que lo cerró. Sin esto, el registro es suelto y editable. */
   jornadaId?: string
 }
@@ -94,8 +141,9 @@ export const PROFUNDIDAD: Record<Catalogo, number> = {
   centrosCosto: 5,
   campos: 3,
   temporadas: 1,
-  modalidades: 2,   // categoría y subcategoría
+  modalidades: 1,   // lista plana: una modalidad no tiene subcategorías
   labores: 3,       // labor, sublabor y detalle
+  especies: 2,      // especie y variedad
 }
 
 export const NOMBRE_CATALOGO: Record<Catalogo, string> = {
@@ -105,6 +153,7 @@ export const NOMBRE_CATALOGO: Record<Catalogo, string> = {
   temporadas: 'Temporadas',
   modalidades: 'Modalidades',
   labores: 'Labores',
+  especies: 'Especies y variedades',
 }
 
 let contador = 0
@@ -144,12 +193,12 @@ function semilla(): Maestros {
     ],
     centrosCosto: [],
     campos: [
-      { id: CAMPO_ID.BUIN, nombre: 'Buin', hijos: [] },
-      { id: CAMPO_ID.GRANEROS, nombre: 'Graneros', hijos: [] },
-      { id: CAMPO_ID.LOS_LIRIOS, nombre: 'Los Lirios', hijos: [] },
-      { id: CAMPO_ID.CHUMACO, nombre: 'Chumaco', hijos: [] },
-      { id: CAMPO_ID.LOCAL_CENTRAL, nombre: 'Local Central', hijos: [] },
-      { id: CAMPO_ID.OTROS, nombre: 'Otros', hijos: [] },
+      { id: CAMPO_ID.BUIN, nombre: 'Buin', codigo: '01', hijos: [] },
+      { id: CAMPO_ID.GRANEROS, nombre: 'Graneros', codigo: '02', hijos: [] },
+      { id: CAMPO_ID.LOS_LIRIOS, nombre: 'Los Lirios', codigo: '03', hijos: [] },
+      { id: CAMPO_ID.CHUMACO, nombre: 'Chumaco', codigo: '04', hijos: [] },
+      { id: CAMPO_ID.LOCAL_CENTRAL, nombre: 'Local Central', codigo: '05', hijos: [] },
+      { id: CAMPO_ID.OTROS, nombre: 'Otros', codigo: '06', hijos: [] },
     ],
     temporadas: [nodo('2024–2025'), nodo('2025–2026'), nodo('2026–2027')],
     /* La modalidad es la forma de pago de la jornada: al día, a trato, domingo
@@ -157,8 +206,9 @@ function semilla(): Maestros {
        queda registrada —hay que saber que faltó— pero suma 0 al mes. */
     modalidades: [
       nodo('Al día', { factor: 1, codigo: 'AD' }),
-      nodo('A trato', { factor: 1, codigo: 'AT' }),
-      nodo('Domingo a trato', { factor: 1, codigo: 'DT' }),
+      nodo('A trato', { factor: 1, codigo: 'AT', porTrato: true }),
+      nodo('Domingo a trato', { factor: 1, codigo: 'DT', porTrato: true }),
+      nodo('Tres cuartos de jornada', { factor: 0.75, codigo: 'TC' }),
       nodo('Media jornada', { factor: 0.5, codigo: 'MJ' }),
       nodo('Vacaciones', { factor: 1, codigo: 'V' }),
       nodo('Licencia médica', { factor: 0, codigo: 'LM' }),
@@ -167,15 +217,23 @@ function semilla(): Maestros {
       nodo('Falta injustificada', { factor: 0, codigo: 'FI' }),
     ],
     /* Las labores admiten sublabores: una poda no es lo mismo que una chapoda,
-       y cada una puede llevar su propio bono. Los montos van en cero porque las
-       tarifas las pone quien las conoce, no el sistema. */
+       y cada una puede llevar su propio bono y su propio precio por unidad. Los
+       montos van en cero porque las tarifas las pone quien las conoce. */
     labores: [
-      nodo('Poda', { bono: 0 }),
-      nodo('Cosecha', { bono: 0 }),
-      nodo('Desbrote', { bono: 0 }),
-      nodo('Raleo', { bono: 0 }),
-      nodo('Fertilización', { bono: 0 }),
-      nodo('Aplicaciones químicas', { bono: 0 }),
+      nodo('Poda', { codigo: '01', bono: 0, precio: 0, unidad: 'planta' }),
+      nodo('Cosecha', { codigo: '02', bono: 0, precio: 0, unidad: 'bin' }),
+      nodo('Desbrote', { codigo: '03', bono: 0, precio: 0, unidad: 'planta' }),
+      nodo('Raleo', { codigo: '04', bono: 0, precio: 0, unidad: 'planta' }),
+      nodo('Fertilización', { codigo: '05', bono: 0, precio: 0, unidad: 'hilera' }),
+      nodo('Aplicaciones químicas', { codigo: '06', bono: 0, precio: 0, unidad: 'hectárea' }),
+    ],
+    /* Especies y variedades salen de las fichas del maestro agrícola. Van sólo
+       las dos que aparecen en los ejemplos; el resto lo carga la empresa. */
+    especies: [
+      { id: nuevoId(), nombre: 'Duraznos', codigo: '01',
+        hijos: [{ id: nuevoId(), nombre: 'Poblet', codigo: '01.01', hijos: [] }] },
+      { id: nuevoId(), nombre: 'Nogales', codigo: '02',
+        hijos: [{ id: nuevoId(), nombre: 'Chandler', codigo: '02.01', hijos: [] }] },
     ],
   }
 }
@@ -253,6 +311,8 @@ interface Api {
   agregar: (c: Catalogo, padreId: string | null, nombre: string, extra?: Partial<Nodo>) => void
   /** Inserta ramas completas de una planilla. Devuelve cuántos nodos creó. */
   importarRamas: (c: Catalogo, ramas: Array<{ camino: string[]; codigo?: string }>) => number
+  /** Rellena los códigos que falten, en orden. Devuelve cuántos puso. */
+  numerarCatalogo: (c: Catalogo) => number
   actualizar: (c: Catalogo, id: string, cambios: Partial<Nodo>) => void
   eliminar: (c: Catalogo, id: string) => void
   mover: (c: Catalogo, id: string, delta: number) => void
@@ -406,6 +466,31 @@ export function ProveedorMaestros({ children }: { children: ReactNode }) {
     [maestros],
   )
 
+  /**
+   * Pone código a lo que no lo tiene, siguiendo el orden en que está el árbol:
+   * 01, 02, 03… y dentro de «02», 02.01.
+   *
+   * Respeta los códigos ya escritos —alguien pudo haberlos puesto a mano por un
+   * motivo— y sólo rellena los huecos. Va en el store porque tiene que recorrer
+   * el árbol entero de una vez, viendo a los padres antes que a los hijos.
+   */
+  const numerarCatalogo = useCallback(
+    (c: Catalogo) => {
+      let puestos = 0
+      const numerar = (lista: Nodo[], prefijo: string): Nodo[] =>
+        lista.map((n, i) => {
+          const codigo = n.codigo?.trim() || `${prefijo}${String(i + 1).padStart(2, '0')}`
+          if (!n.codigo?.trim()) puestos++
+          return { ...n, codigo, hijos: numerar(n.hijos, `${codigo}.`) }
+        })
+
+      const numerado = numerar(maestros[c], '')
+      if (puestos > 0) setMaestros((m) => ({ ...m, [c]: numerado }))
+      return puestos
+    },
+    [maestros],
+  )
+
   const mover = useCallback((c: Catalogo, id: string, delta: number) => {
     setMaestros((m) => ({ ...m, [c]: moverEntreHermanos(m[c], id, delta) }))
   }, [])
@@ -481,12 +566,12 @@ export function ProveedorMaestros({ children }: { children: ReactNode }) {
   const api = useMemo(
     () => ({
       maestros, asistencia, trabajadores, jornadas, cerrarJornada, reabrirJornada,
-      agregar, actualizar, eliminar, mover, importarRamas,
+      agregar, actualizar, eliminar, mover, importarRamas, numerarCatalogo,
       guardarTrabajador, eliminarTrabajador,
       agregarAsistencia, actualizarAsistencia, eliminarAsistencia, restaurarMaestros,
     }),
     [maestros, asistencia, trabajadores, jornadas, cerrarJornada, reabrirJornada,
-     agregar, actualizar, eliminar, mover, importarRamas,
+     agregar, actualizar, eliminar, mover, importarRamas, numerarCatalogo,
      guardarTrabajador, eliminarTrabajador,
      agregarAsistencia, actualizarAsistencia, eliminarAsistencia, restaurarMaestros],
   )

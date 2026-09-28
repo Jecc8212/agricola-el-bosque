@@ -240,15 +240,94 @@ function ModalClave({ usuario, onCerrar, onGuardar }: {
   )
 }
 
+
+/** La misma tabla sirve para las habilitadas y para las inhabilitadas: lo único
+ *  que cambia es el tono y qué ofrece el último botón. */
+function Tabla({
+  filas, yo, atenuada = false, onEditar, onClave, onCambiar,
+}: {
+  filas: Usuario[]
+  yo?: string
+  atenuada?: boolean
+  onEditar: (u: Usuario) => void
+  onClave: (u: Usuario) => void
+  onCambiar: (u: Usuario) => void
+}) {
+  if (filas.length === 0) {
+    return (
+      <div className="rounded-md border border-line bg-surface px-4 py-10 text-center text-sm text-ink-faint">
+        Ninguna cuenta habilitada.
+      </div>
+    )
+  }
+
+  return (
+    <div className={cn('overflow-x-auto rounded-md border border-line bg-surface', atenuada && 'opacity-75')}>
+      <table className="w-full min-w-[760px] text-sm">
+        <thead>
+          <tr className="border-b border-line bg-surface-sunken text-2xs tracking-wide text-ink-faint">
+            <th className="px-3 py-2 text-left font-medium">USUARIO</th>
+            <th className="px-3 py-2 text-left font-medium">NOMBRE</th>
+            <th className="px-3 py-2 text-left font-medium">ROL</th>
+            <th className="px-3 py-2 text-left font-medium">ACCESOS</th>
+            <th className="w-72 px-3 py-2 text-right font-medium">ACCIONES</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filas.map((u) => (
+            <tr key={u.usuario} className="border-b border-line last:border-0">
+              <td className="mono whitespace-nowrap px-3 py-1.5">
+                {u.usuario}
+                {yo === u.usuario && <span className="ml-2 text-2xs text-ink-faint">(tú)</span>}
+              </td>
+              <td className="whitespace-nowrap px-3 py-1.5 font-medium">{u.nombre}</td>
+              <td className="whitespace-nowrap px-3 py-1.5 text-ink-faint">{nombreRol(u.rol)}</td>
+              <td className="px-3 py-1.5">
+                <div className="flex flex-wrap gap-1">
+                  {seccionesDe(u).map((s) => {
+                    const conocida = SECCIONES.find((x) => x.clave === s)
+                    return (
+                      <Chip key={s} tone={conocida ? 'primary' : 'warning'}>
+                        {conocida ? conocida.nombre : `${s} (ya no existe)`}
+                      </Chip>
+                    )
+                  })}
+                  {u.provisoria && <Chip tone="warning">Clave provisoria</Chip>}
+                </div>
+              </td>
+              <td className="px-3 py-1.5">
+                <div className="flex justify-end gap-1">
+                  <Button size="sm" onClick={() => onEditar(u)}>Editar</Button>
+                  <Button size="sm" onClick={() => onClave(u)}>Clave</Button>
+                  <Button
+                    size="sm"
+                    variant={u.inhabilitado ? 'primary' : 'ghost'}
+                    onClick={() => onCambiar(u)}
+                  >
+                    {u.inhabilitado ? 'Habilitar' : 'Inhabilitar'}
+                  </Button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 export default function Usuarios() {
   const {
-    sesion, usuarios, crearUsuario, actualizarUsuario, eliminarUsuario, restablecerClave,
+    sesion, usuarios, crearUsuario, actualizarUsuario, cambiarHabilitacion, restablecerClave,
   } = useAuth()
   const [creando, setCreando] = useState(false)
   const [editando, setEditando] = useState<Usuario | null>(null)
   const [cambiandoClave, setCambiandoClave] = useState<Usuario | null>(null)
-  const [borrando, setBorrando] = useState<Usuario | null>(null)
+  const [cambiando, setCambiando] = useState<{ usuario: Usuario; habilitar: boolean } | null>(null)
   const [avisoBorrado, setAvisoBorrado] = useState('')
+
+  const habilitados = usuarios.filter((u) => !u.inhabilitado)
+  const inhabilitados = usuarios.filter((u) => u.inhabilitado)
 
   return (
     <Pagina
@@ -262,57 +341,33 @@ export default function Usuarios() {
         </p>
       )}
 
-      <div className="overflow-x-auto rounded-md border border-line bg-surface">
-        <table className="w-full min-w-[760px] text-sm">
-          <thead>
-            <tr className="border-b border-line bg-surface-sunken text-2xs tracking-wide text-ink-faint">
-              <th className="px-3 py-2 text-left font-medium">USUARIO</th>
-              <th className="px-3 py-2 text-left font-medium">NOMBRE</th>
-              <th className="px-3 py-2 text-left font-medium">ROL</th>
-              <th className="px-3 py-2 text-left font-medium">ACCESOS</th>
-              <th className="w-64 px-3 py-2 text-right font-medium">ACCIONES</th>
-            </tr>
-          </thead>
-          <tbody>
-            {usuarios.map((u) => (
-              <tr key={u.usuario} className="border-b border-line last:border-0">
-                <td className="mono whitespace-nowrap px-3 py-1.5">
-                  {u.usuario}
-                  {sesion?.usuario === u.usuario && (
-                    <span className="ml-2 text-2xs text-ink-faint">(tú)</span>
-                  )}
-                </td>
-                <td className="whitespace-nowrap px-3 py-1.5 font-medium">{u.nombre}</td>
-                <td className="whitespace-nowrap px-3 py-1.5 text-ink-faint">{nombreRol(u.rol)}</td>
-                <td className="px-3 py-1.5">
-                  <div className="flex flex-wrap gap-1">
-                    {seccionesDe(u).map((s) => {
-                      // Un acceso a una sección que ya no existe se marca en vez
-                      // de disimularse: así quien administra sabe qué recolocar.
-                      const conocida = SECCIONES.find((x) => x.clave === s)
-                      return (
-                        <Chip key={s} tone={conocida ? 'primary' : 'warning'}>
-                          {conocida ? conocida.nombre : `${s} (ya no existe)`}
-                        </Chip>
-                      )
-                    })}
-                    {u.provisoria && <Chip tone="warning">Clave provisoria</Chip>}
-                  </div>
-                </td>
-                <td className="px-3 py-1.5">
-                  <div className="flex justify-end gap-1">
-                    <Button size="sm" onClick={() => setEditando(u)}>Editar</Button>
-                    <Button size="sm" onClick={() => setCambiandoClave(u)}>Clave</Button>
-                    <Button size="sm" variant="ghost" onClick={() => { setBorrando(u); setAvisoBorrado('') }}>
-                      Eliminar
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Tabla
+        filas={habilitados}
+        yo={sesion?.usuario}
+        onEditar={setEditando}
+        onClave={setCambiandoClave}
+        onCambiar={(u) => { setCambiando({ usuario: u, habilitar: false }); setAvisoBorrado('') }}
+      />
+
+      {inhabilitados.length > 0 && (
+        <div className="mt-8">
+          <p className="mb-2 text-2xs font-semibold tracking-wide text-ink-muted">
+            CUENTAS INHABILITADAS · {inhabilitados.length}
+          </p>
+          <p className="mb-3 max-w-[70ch] text-sm text-ink-faint">
+            No pueden entrar, pero su historial se conserva: las jornadas que cerraron siguen
+            firmadas por ellas. Se pueden volver a habilitar cuando haga falta.
+          </p>
+          <Tabla
+            filas={inhabilitados}
+            yo={sesion?.usuario}
+            atenuada
+            onEditar={setEditando}
+            onClave={setCambiandoClave}
+            onCambiar={(u) => { setCambiando({ usuario: u, habilitar: true }); setAvisoBorrado('') }}
+          />
+        </div>
+      )}
 
       {creando && (
         <FormularioUsuario
@@ -352,15 +407,25 @@ export default function Usuarios() {
           }}
         />
       )}
-      {borrando && (
+      {cambiando && (
         <ModalConfirmar
-          titulo={`Eliminar a ${borrando.nombre}`}
-          descripcion="La cuenta deja de poder entrar. Los registros que haya creado se conservan."
-          onCerrar={() => setBorrando(null)}
+          titulo={
+            cambiando.habilitar
+              ? `¿Habilitar a ${cambiando.usuario.nombre}?`
+              : `¿Inhabilitar a ${cambiando.usuario.nombre}?`
+          }
+          descripcion={
+            cambiando.habilitar
+              ? 'Volverá a poder entrar con su contraseña actual.'
+              : 'Dejará de poder entrar. Su historial se conserva y pasa a la lista de inhabilitadas.'
+          }
+          confirmar={cambiando.habilitar ? 'Sí, habilitar' : 'Sí, inhabilitar'}
+          tono={cambiando.habilitar ? 'primary' : 'danger'}
+          onCerrar={() => setCambiando(null)}
           onConfirmar={() => {
-            const r = eliminarUsuario(borrando.usuario)
-            if (!r.ok) setAvisoBorrado(r.error ?? 'No se pudo eliminar')
-            setBorrando(null)
+            const r = cambiarHabilitacion(cambiando.usuario.usuario, cambiando.habilitar)
+            if (!r.ok) setAvisoBorrado(r.error ?? 'No se pudo cambiar')
+            setCambiando(null)
           }}
         />
       )}

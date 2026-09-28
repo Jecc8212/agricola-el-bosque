@@ -5,11 +5,29 @@
  * `currentColor`— y se ve nítida a cualquier tamaño, sin pedir una descarga
  * más al abrir el sistema.
  */
-export function Marca({ className }: { className?: string }) {
+export function Marca({
+  className, decorativa = false,
+}: {
+  className?: string
+  /**
+   * Cuando es puro adorno —la marca de agua del Home, por ejemplo— se oculta a
+   * los lectores de pantalla. Si no, repetiría el nombre de la empresa que ya
+   * está a un palmo, en la barra lateral.
+   *
+   * Va como prop y no como `aria-hidden` suelto porque TypeScript **no valida
+   * los atributos con guion** en un componente propio: se descartaba en
+   * silencio y parecía puesto.
+   */
+  decorativa?: boolean
+}) {
+  const accesibilidad = decorativa
+    ? ({ 'aria-hidden': true } as const)
+    : ({ role: 'img', 'aria-label': 'Agrícola El Bosque' } as const)
+
   return (
     <svg
-      viewBox="0 0 32 32" className={className} role="img"
-      aria-label="Agrícola El Bosque" fill="none" stroke="currentColor"
+      viewBox="0 0 32 32" className={className} {...accesibilidad}
+      fill="none" stroke="currentColor"
       strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
     >
       {/* Copa: tres alturas, como un árbol de fruta bien podado. */}

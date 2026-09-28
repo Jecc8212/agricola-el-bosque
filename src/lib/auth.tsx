@@ -35,7 +35,8 @@ export const nombreRol = (rol: string) =>
 export const SECCIONES = [
   { clave: 'home', nombre: 'Home', detalle: 'Resumen de costos por centro' },
   { clave: 'cuentas', nombre: 'Cuentas', detalle: 'Master de cuentas de 9 niveles' },
-  { clave: 'rrhh', nombre: 'Recursos humanos', detalle: 'Trabajadores, asistencia, tarja y semillas' },
+  { clave: 'rrhh', nombre: 'Recursos humanos', detalle: 'Trabajadores, asistencia y sueldos' },
+  { clave: 'pasar-lista', nombre: 'Tomar asistencia', detalle: 'Pasar lista del día en el campo — propio del jefe de campo' },
   { clave: 'maestros', nombre: 'Maestros', detalle: 'Labores, centros de costo, campos, temporadas y modalidades' },
   { clave: 'sistema', nombre: 'Configuración', detalle: 'Usuarios, accesos y design system' },
 ] as const
@@ -44,8 +45,9 @@ export const SECCIONES = [
 export const PERMISOS: Record<Rol, string[]> = {
   ADMINISTRADOR: ['home', 'cuentas', 'rrhh', 'maestros', 'sistema'],
   CONTABILIDAD: ['home', 'cuentas', 'rrhh', 'maestros'],
-  // El jefe de campo registra gente y días; no toca la contabilidad.
-  JEFE: ['home', 'rrhh'],
+  /* El jefe de campo pasa lista y nada más: no contabiliza, no liquida, no
+     administra maestros. Es lo único que hace, y por eso lo hace bien. */
+  JEFE: ['home', 'pasar-lista'],
 }
 
 export interface Usuario {
@@ -62,6 +64,12 @@ export interface Usuario {
    * lista de— ese campo: el filtro de campo queda fijo y no se puede cambiar.
    */
   campoId?: string
+  /**
+   * Inhabilitada. No se borra: los registros que creó siguen apuntando a ella,
+   * y una auditoría tiene que poder saber quién cerró cada jornada. Se le quita
+   * el acceso y se va a la lista de inhabilitadas.
+   */
+  inhabilitado?: boolean
 }
 
 /**
@@ -93,6 +101,7 @@ function sanearUsuarios(crudo: unknown): Usuario[] {
       usuario: u.usuario,
       nombre: typeof u.nombre === 'string' && u.nombre.trim() ? u.nombre : u.usuario,
       campoId: typeof u.campoId === 'string' && u.campoId ? u.campoId : undefined,
+      inhabilitado: u.inhabilitado === true,
       rol: esRol(u.rol) ? u.rol : ROL_POR_DEFECTO,
       hash: u.hash,
       provisoria: u.provisoria !== false,
@@ -105,8 +114,21 @@ function sanearUsuarios(crudo: unknown): Usuario[] {
   })
 }
 
-/** La primera cuenta, para poder entrar. Nace provisoria: se cambia al entrar. */
-const PRIMER_ADMIN = { usuario: 'admin', clave: 'Admin2026', nombre: 'Administrador', rol: 'ADMINISTRADOR' as Rol }
+/**
+ * Cuentas de arranque, una por rol, con claves simples y a la vista en el login.
+ *
+ * Es deliberado y provisional: mientras el sistema se está armando, esconder
+ * las claves sólo consigue dejar a alguien fuera. Nacen **provisorias**, así que
+ * el sistema obliga a cambiarlas al entrar, y en cuanto se cambian dejan de
+ * aparecer en la pantalla de acceso.
+ */
+export const CUENTAS_INICIALES: Array<{
+  usuario: string; clave: string; nombre: string; rol: Rol
+}> = [
+  { usuario: 'administrador', clave: 'administrador123', nombre: 'Administrador', rol: 'ADMINISTRADOR' },
+  { usuario: 'contabilidad', clave: 'contabilidad123', nombre: 'Contabilidad', rol: 'CONTABILIDAD' },
+  { usuario: 'jefecampo', clave: 'jefecampo123', nombre: 'Jefe de campo', rol: 'JEFE' },
+]
 
 /**
  * `crypto.subtle` sólo existe en contexto seguro: https o localhost. Abierto por
@@ -136,7 +158,7 @@ interface Api {
   puedeVer: (seccion: string) => boolean
   crearUsuario: (datos: Omit<Usuario, 'hash' | 'provisoria'>, clave: string) => Promise<{ ok: boolean; error?: string }>
   actualizarUsuario: (usuario: string, cambios: Partial<Usuario>) => { ok: boolean; error?: string }
-  eliminarUsuario: (usuario: string) => { ok: boolean; error?: string }
+  cambiarHabilitacion: (usuario: string, habilitar: boolean) => { ok: boolean; error?: string }
   restablecerClave: (usuario: string, clave: string) => Promise<{ ok: boolean; error?: string }>
 }
 
@@ -178,13 +200,15 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
         // y no se rehace en cada arranque.
         if (lista.length > 0) escribir(CLAVE_U, lista)
         if (lista.length === 0) {
-          lista = [{
-            usuario: PRIMER_ADMIN.usuario,
-            nombre: PRIMER_ADMIN.nombre,
-            rol: PRIMER_ADMIN.rol,
-            hash: await hashear(PRIMER_ADMIN.clave),
-            provisoria: true,
-          }]
+          lista = await Promise.all(
+            CUENTAS_INICIALES.map(async (c) => ({
+              usuario: c.usuario,
+              nombre: c.nombre,
+              rol: c.rol,
+              hash: await hashear(c.clave),
+              provisoria: true,
+            })),
+          )
           escribir(CLAVE_U, lista)
         }
         if (!vivo) return
@@ -218,6 +242,7 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
       // Mismo mensaje para usuario inexistente y clave errada: decir cuál de
       // los dos falló le regala al que prueba la mitad de la respuesta.
       if (!u) return { ok: false, error: 'Usuario o contraseña incorrectos' }
+      if (u.inhabilitado) return { ok: false, error: 'Esta cuenta está inhabilitada' }
       if ((await hashear(clave)) !== u.hash) return { ok: false, error: 'Usuario o contraseña incorrectos' }
       setSesion(u)
       escribir(CLAVE_S, u.usuario)
@@ -253,9 +278,9 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
   )
 
   /* Nadie debe poder dejar el sistema sin quien administre usuarios: si el
-     cambio deja cero cuentas con acceso a Configuración, se rechaza. */
+     cambio deja cero cuentas habilitadas con acceso a Configuración, se rechaza. */
   const quedaAlgunAdministrador = (lista: Usuario[]) =>
-    lista.some((u) => seccionesDe(u).includes('sistema'))
+    lista.some((u) => !u.inhabilitado && seccionesDe(u).includes('sistema'))
 
   const crearUsuario = useCallback(
     async (datos: Omit<Usuario, 'hash' | 'provisoria'>, clave: string) => {
@@ -284,12 +309,20 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
     [usuarios, persistir, sesion],
   )
 
-  const eliminarUsuario = useCallback(
-    (usuario: string) => {
-      if (sesion?.usuario === usuario) return { ok: false, error: 'No puede eliminar su propia cuenta' }
-      const lista = usuarios.filter((u) => u.usuario !== usuario)
+  /**
+   * Habilita o inhabilita. **No borra nunca**: los registros que esa persona
+   * creó —las jornadas que cerró, sobre todo— siguen apuntando a su cuenta, y
+   * borrarla los dejaría firmados por nadie.
+   */
+  const cambiarHabilitacion = useCallback(
+    (usuario: string, habilitar: boolean) => {
+      if (!habilitar && sesion?.usuario === usuario)
+        return { ok: false, error: 'No puede inhabilitar su propia cuenta' }
+      const lista = usuarios.map((u) =>
+        u.usuario === usuario ? { ...u, inhabilitado: !habilitar } : u,
+      )
       if (!quedaAlgunAdministrador(lista))
-        return { ok: false, error: 'Debe quedar al menos una cuenta con acceso a Configuración' }
+        return { ok: false, error: 'Debe quedar al menos una cuenta habilitada con acceso a Configuración' }
       persistir(lista)
       return { ok: true }
     },
@@ -310,10 +343,10 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
   const api = useMemo(
     () => ({
       fallo, sesion, usuarios, listo, entrar, salir, cambiarClave, puedeVer,
-      crearUsuario, actualizarUsuario, eliminarUsuario, restablecerClave,
+      crearUsuario, actualizarUsuario, cambiarHabilitacion, restablecerClave,
     }),
     [fallo, sesion, usuarios, listo, entrar, salir, cambiarClave, puedeVer,
-     crearUsuario, actualizarUsuario, eliminarUsuario, restablecerClave],
+     crearUsuario, actualizarUsuario, cambiarHabilitacion, restablecerClave],
   )
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>

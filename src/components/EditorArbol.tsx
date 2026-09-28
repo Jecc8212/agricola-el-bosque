@@ -42,6 +42,23 @@ function BotonIcono({
   )
 }
 
+/**
+ * Propone el siguiente código de la rama: 01, 02, 03… y dentro de «02», 02.01.
+ *
+ * Se calcula sobre los hermanos, no sobre el total, para que el código diga
+ * dónde está el registro. Es una **propuesta**: el campo queda editable, porque
+ * hay catálogos —las cuentas contables, sin ir más lejos— donde el código lo
+ * manda el plan y no el orden de creación.
+ */
+function siguienteCodigo(hermanos: Nodo[], padre: Nodo | null): string {
+  const prefijo = padre?.codigo?.trim() ? `${padre.codigo.trim()}.` : ''
+  const usados = hermanos
+    .map((h) => Number(h.codigo?.trim().split('.').pop()))
+    .filter((n) => Number.isFinite(n) && n > 0)
+  const siguiente = (usados.length > 0 ? Math.max(...usados) : 0) + 1
+  return `${prefijo}${String(siguiente).padStart(2, '0')}`
+}
+
 interface Props {
   catalogo: Catalogo
   /** "cuenta", "centro de costo": se usa en los títulos de los diálogos. */
@@ -49,6 +66,8 @@ interface Props {
   /** Concordancia: «Nueva cuenta» vs «Nuevo centro de costo». */
   femenino?: boolean
   mostrarCodigo?: boolean
+  /** Propone el código al crear. Se sigue pudiendo escribir a mano. */
+  codigoAutomatico?: boolean
   /** Campos extra del formulario, más allá de nombre y código. */
   camposExtra?: (n?: Nodo) => CampoForm[]
   /** Cómo se leen esos campos extra en la tabla. */
@@ -62,19 +81,21 @@ interface Props {
  * eliminar. Todo dentro de la página, sin salir a otra pantalla.
  */
 export function EditorArbol({
-  catalogo, singular, femenino = false, mostrarCodigo = false,
+  catalogo, singular, femenino = false, mostrarCodigo = false, codigoAutomatico = false,
   camposExtra, columnaExtra, vacio,
 }: Props) {
-  const { maestros, agregar, actualizar, eliminar, mover, importarRamas } = useMaestros()
+  const { maestros, agregar, actualizar, eliminar, mover, importarRamas, numerarCatalogo } = useMaestros()
   const lista = maestros[catalogo]
   const filas = aplanar(lista)
   const maxNivel = PROFUNDIDAD[catalogo]
   const un = femenino ? 'Nueva' : 'Nuevo'
+  const sinCodigo = filas.filter(({ nodo }) => !nodo.codigo?.trim()).length
   const del = femenino ? 'de la' : 'del'
 
   const [creando, setCreando] = useState<{ padre: Nodo | null } | null>(null)
   const [editando, setEditando] = useState<Nodo | null>(null)
   const [borrando, setBorrando] = useState<Nodo | null>(null)
+  const [avisoNumerar, setAvisoNumerar] = useState('')
 
   function camposDe(n?: Nodo, padre?: Nodo | null): CampoForm[] {
     const base: CampoForm[] = [
@@ -82,8 +103,18 @@ export function EditorArbol({
         placeholder: `Nombre ${del} ${singular}` },
     ]
     if (mostrarCodigo) {
-      base.push({ tipo: 'texto', id: 'codigo', etiqueta: 'Código', valor: n?.codigo ?? '',
-        placeholder: 'Opcional' })
+      /* Al crear se propone el siguiente de la rama; al editar se respeta el
+         que ya tiene, que alguien pudo haber puesto a mano. */
+      const propuesto =
+        codigoAutomatico && !n
+          ? siguienteCodigo(padre ? padre.hijos : lista, padre ?? null)
+          : ''
+      base.push({
+        tipo: 'texto', id: 'codigo', etiqueta: 'Código',
+        valor: n?.codigo ?? propuesto,
+        placeholder: codigoAutomatico ? 'Se propone solo' : 'Opcional',
+        ayuda: codigoAutomatico && !n ? 'Propuesto según la rama. Puedes cambiarlo.' : undefined,
+      })
     }
     /* Una subcategoría nace dentro de su padre: hereda sus ataduras en vez de
        obligar a repetirlas, y se pueden cambiar si hace falta. */
@@ -100,6 +131,14 @@ export function EditorArbol({
     if ('bono' in v) cambios.bono = Number(v.bono) || 0
     if ('campoId' in v) cambios.campoId = v.campoId || undefined
     if ('temporadaId' in v) cambios.temporadaId = v.temporadaId || undefined
+    if ('especieId' in v) cambios.especieId = v.especieId || undefined
+    if ('variedadId' in v) cambios.variedadId = v.variedadId || undefined
+    if ('etapa' in v) cambios.etapa = (v.etapa || undefined) as Nodo['etapa']
+    if ('hectareas' in v) cambios.hectareas = Number(v.hectareas) || undefined
+    if ('plantas' in v) cambios.plantas = Number(v.plantas) || undefined
+    if ('precio' in v) cambios.precio = Number(v.precio) || 0
+    if ('unidad' in v) cambios.unidad = v.unidad.trim() || undefined
+    if ('porTrato' in v) cambios.porTrato = v.porTrato === 'si'
     return cambios
   }
 
@@ -169,9 +208,22 @@ export function EditorArbol({
       {/* El botón de crear va arriba: es lo primero que se busca. */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <p className="text-2xs text-ink-faint">
-          {filas.length} {filas.length === 1 ? 'registro' : 'registros'} · hasta {maxNivel}{' '}
-          {maxNivel === 1 ? 'nivel' : 'niveles'} · el orden lo defines tú
+          {filas.length} {filas.length === 1 ? 'registro' : 'registros'}
+          {maxNivel > 1 && ` · hasta ${maxNivel} niveles`} · el orden lo defines tú
         </p>
+        {/* Los registros creados antes de que existiera el código quedan sin
+            él; esto los numera de una vez en vez de obligar a editarlos uno a
+            uno. Sólo rellena huecos: lo escrito a mano se respeta. */}
+        {codigoAutomatico && sinCodigo > 0 && (
+          <Button
+            onClick={() => {
+              const n = numerarCatalogo(catalogo)
+              setAvisoNumerar(`${n} ${n === 1 ? 'registro numerado' : 'registros numerados'}.`)
+            }}
+          >
+            Numerar los {sinCodigo} sin código
+          </Button>
+        )}
         <Button variant="primary" onClick={() => setCreando({ padre: null })}>
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor"
             strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d={MAS} /></svg>
@@ -179,11 +231,19 @@ export function EditorArbol({
         </Button>
       </div>
 
+      {avisoNumerar && (
+        <p role="status" className="mb-3 rounded-sm bg-primary-tint px-2 py-1.5 text-sm text-primary-text">
+          {avisoNumerar}
+        </p>
+      )}
+
       <div className="overflow-x-auto rounded-md border border-line bg-surface">
         <table className="w-full min-w-[680px] text-sm">
           <thead>
             <tr className="border-b border-line bg-surface-sunken text-2xs tracking-wide text-ink-faint">
-              <th className="w-14 px-3 py-2 text-left font-medium">NIVEL</th>
+              {/* Un catálogo plano no tiene jerarquía que mostrar: la columna
+                  de nivel sólo repetiría «N1» en todas las filas. */}
+              {maxNivel > 1 && <th className="w-14 px-3 py-2 text-left font-medium">NIVEL</th>}
               {mostrarCodigo && <th className="w-28 px-3 py-2 text-left font-medium">CÓDIGO</th>}
               <th className="px-3 py-2 text-left font-medium">NOMBRE</th>
               {columnaExtra && (
@@ -200,9 +260,11 @@ export function EditorArbol({
               const pos = hermanos ? hermanos.findIndex((h) => h.id === n.id) : -1
               return (
                 <tr key={n.id} className="border-b border-line last:border-0 transition-colors duration-100 hover:bg-surface-sunken/50">
-                  <td className="mono whitespace-nowrap px-3 py-1.5 text-2xs text-ink-disabled">
-                    N{nivel + 1}
-                  </td>
+                  {maxNivel > 1 && (
+                    <td className="mono whitespace-nowrap px-3 py-1.5 text-2xs text-ink-disabled">
+                      N{nivel + 1}
+                    </td>
+                  )}
                   {mostrarCodigo && (
                     <td className="mono whitespace-nowrap px-3 py-1.5 text-ink-faint">
                       {n.codigo || <span className="text-ink-disabled">—</span>}
@@ -236,9 +298,11 @@ export function EditorArbol({
                       <BotonIcono d={ABAJO} etiqueta={`Bajar ${n.nombre}`}
                         onClick={() => mover(catalogo, n.id, 1)}
                         disabled={hermanos ? pos === hermanos.length - 1 : false} />
-                      <BotonIcono d={MAS}
-                        etiqueta={nivel + 1 >= maxNivel ? `Máximo ${maxNivel} niveles` : `Agregar subcategoría en ${n.nombre}`}
-                        onClick={() => setCreando({ padre: n })} disabled={nivel + 1 >= maxNivel} />
+                      {maxNivel > 1 && (
+                        <BotonIcono d={MAS}
+                          etiqueta={nivel + 1 >= maxNivel ? `Máximo ${maxNivel} niveles` : `Agregar subcategoría en ${n.nombre}`}
+                          onClick={() => setCreando({ padre: n })} disabled={nivel + 1 >= maxNivel} />
+                      )}
                       <BotonIcono d={LAPIZ} etiqueta={`Editar ${n.nombre}`} onClick={() => setEditando(n)} />
                       <BotonIcono d={BASURA} etiqueta={`Eliminar ${n.nombre}`} tono="danger"
                         onClick={() => setBorrando(n)} />

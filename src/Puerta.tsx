@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from 'react'
 import { RouterProvider } from 'react-router-dom'
+import { Intro } from '@/components/Intro'
 import { Login } from '@/pages/Login'
 import { CambiarClave } from '@/pages/CambiarClave'
 import { useAuth } from '@/lib/auth'
@@ -10,6 +12,54 @@ import { router } from '@/router'
  */
 export function Puerta() {
   const { sesion, listo, fallo } = useAuth()
+  /* La cortina se muestra una vez por pestaña, no en cada recarga: durante el
+     trabajo se recarga a menudo y dos segundos cada vez cansan. */
+  const [introVista, setIntroVista] = useState(() => {
+    try {
+      return sessionStorage.getItem('aeb.intro') === 'vista'
+    } catch {
+      return true
+    }
+  })
+
+  /**
+   * Al iniciar sesión se aterriza en el Home, no en la pantalla que quedara en
+   * la barra de direcciones.
+   *
+   * Se hace con `router.navigate` y no tocando el historial: el router guarda
+   * su propia ubicación, así que cambiar la URL por fuera le movería la barra
+   * de direcciones sin cambiarle la pantalla.
+   */
+  const sesionPrevia = useRef<typeof sesion>(null)
+  const yaArranco = useRef(false)
+  useEffect(() => {
+    if (!listo) return
+    /* El primer render con la sesión ya resuelta es el arranque, no un login:
+       se anota y no se navega. Si no, recargar una pantalla cualquiera te
+       devolvería al Home y los enlaces directos dejarían de funcionar. */
+    if (!yaArranco.current) {
+      yaArranco.current = true
+      sesionPrevia.current = sesion
+      return
+    }
+    if (!sesionPrevia.current && sesion) void router.navigate('/')
+    sesionPrevia.current = sesion
+  }, [sesion, listo])
+
+  if (!introVista) {
+    return (
+      <Intro
+        onTerminar={() => {
+          try {
+            sessionStorage.setItem('aeb.intro', 'vista')
+          } catch {
+            /* almacenamiento bloqueado */
+          }
+          setIntroVista(true)
+        }}
+      />
+    )
+  }
 
   // Sembrar la primera cuenta hashea, y eso es asíncrono. Sin esta espera se ve
   // el login por un instante aunque haya sesión guardada.

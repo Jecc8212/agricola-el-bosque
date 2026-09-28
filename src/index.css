@@ -272,6 +272,23 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   Barrido de la cortina de entrada
+   Un ángulo no se puede animar solo: hay que declararlo como propiedad
+   tipada para que el navegador sepa interpolarlo. Sin esto, la máscara
+   saltaría de 0 a 360 sin pasar por el medio.
+   ══════════════════════════════════════════════════════════════════════════ */
+@property --barrido {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes barrido {
+  from { --barrido: 0deg; }
+  to   { --barrido: 360deg; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    Motion reducido
    No es apagar todo: se conserva lo que comunica (opacidad, color) y se
    elimina lo que desplaza. Quien marca esta preferencia suele tener una razón.

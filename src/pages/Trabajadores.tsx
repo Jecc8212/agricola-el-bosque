@@ -18,8 +18,8 @@ import { esRutValido, formatearRut } from '@/lib/rut'
 import { useDialogo } from '@/lib/useDialogo'
 import { TODOS, useContextoOperacion } from '@/lib/contexto'
 import { aplanar, buscarNodo, useMaestros } from '@/lib/maestros'
-import { nombreCompleto } from '@/lib/types'
-import type { EstadoTrabajador, Trabajador } from '@/lib/types'
+import { CLASE_LABEL, nombreCompleto } from '@/lib/types'
+import type { ClaseTrabajador, EstadoTrabajador, Trabajador } from '@/lib/types'
 
 const ESTADO_TONO: Record<EstadoTrabajador, 'success' | 'warning' | 'neutral'> = {
   ACTIVO: 'success',
@@ -175,6 +175,13 @@ export default function Trabajadores() {
         opciones: aplanar(maestros.campos).map(({ nodo, nivel }) => ({
           valor: nodo.id, etiqueta: `${'— '.repeat(nivel)}${nodo.nombre}`,
         })) },
+      /* Agrícola o de planta: cambia por completo cómo se le liquida, así que
+         se pregunta al crear la ficha y no después. */
+      { tipo: 'select', id: 'clase', etiqueta: 'Tipo de trabajador', requerido: true,
+        valor: t?.clase ?? 'AGRICOLA',
+        opciones: (['AGRICOLA', 'PLANTA'] as ClaseTrabajador[]).map((c) => ({
+          valor: c, etiqueta: CLASE_LABEL[c],
+        })) },
       { tipo: 'select', id: 'centroCostoId', etiqueta: 'Centro de costo',
         valor: t?.centroCostoId ?? '',
         opciones: (() => {
@@ -228,6 +235,7 @@ export default function Trabajadores() {
         campoId: v.campoId,
         modalidadId: v.modalidadId || undefined,
         centroCostoId: v.centroCostoId || undefined,
+        clase: (v.clase as ClaseTrabajador) || 'AGRICOLA',
         estado: v.estado as EstadoTrabajador,
         fechaIngreso: v.fechaIngreso,
         sueldoBase: Number(v.sueldoBase) || 0,
@@ -250,6 +258,7 @@ export default function Trabajadores() {
     RUT: formatearRut(t.rut),
     Nombres: t.nombres,
     Apellidos: t.apellidos,
+    Tipo: CLASE_LABEL[t.clase ?? 'AGRICOLA'],
     Cargo: CARGO_POR_CODIGO.get(t.cargo)?.nombre ?? t.cargo,
     Campo: nombreCampo(t.campoId) ?? '',
     'Centro de costo': buscarNodo(maestros.centrosCosto, t.centroCostoId)?.nombre ?? '',
@@ -268,6 +277,7 @@ export default function Trabajadores() {
     RUT: '12.345.678-5',
     Nombres: 'María Elena',
     Apellidos: 'Rojas Pérez',
+    Tipo: CLASE_LABEL.AGRICOLA,
     Cargo: CARGOS[0].nombre,
     Campo: maestros.campos[0]?.nombre ?? 'Buin',
     'Centro de costo': maestros.centrosCosto[0]?.nombre ?? '',
@@ -332,6 +342,7 @@ export default function Trabajadores() {
         // Sin modalidad la ficha entra igual: se ve como «sin asignar» y se
         // corrige desde la pantalla, en vez de rechazar la carga entera.
         modalidadId: porModalidad.get(normalizar(col('Modalidad'))),
+        clase: normalizar(col('Tipo')).includes('planta') ? 'PLANTA' : 'AGRICOLA',
         centroCostoId: porCentro.get(normalizar(col('Centro de costo'))),
         estado: porEstado.get(normalizar(col('Estado'))) ?? 'ACTIVO',
         fechaIngreso,
@@ -396,6 +407,7 @@ export default function Trabajadores() {
             <tr className="border-b border-line bg-surface-sunken text-2xs tracking-wide text-ink-faint">
               <th className="px-3 py-2 text-left font-medium">RUT</th>
               <th className="px-3 py-2 text-left font-medium">NOMBRE</th>
+              <th className="px-3 py-2 text-left font-medium">TIPO</th>
               <th className="px-3 py-2 text-left font-medium">CARGO</th>
               <th className="px-3 py-2 text-left font-medium">CUENTA</th>
               <th className="px-3 py-2 text-left font-medium">CAMPO</th>
@@ -422,6 +434,11 @@ export default function Trabajadores() {
                 >
                   <td className="mono whitespace-nowrap px-3 py-1.5 text-ink-faint">{formatearRut(t.rut)}</td>
                   <td className="whitespace-nowrap px-3 py-1.5 font-medium">{nombreCompleto(t)}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5">
+                    <Chip tone={t.clase === 'PLANTA' ? 'neutral' : 'primary'}>
+                      {t.clase === 'PLANTA' ? 'Planta' : 'Agrícola'}
+                    </Chip>
+                  </td>
                   <td className="whitespace-nowrap px-3 py-1.5">{cargo?.nombre ?? '—'}</td>
                   <td className="mono whitespace-nowrap px-3 py-1.5 text-ink-faint">{cargo?.cuenta ?? '—'}</td>
                   <td className="px-3 py-1.5">

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { buscarNodo, useMaestros } from '@/lib/maestros'
+import { mesActual } from '@/lib/mes'
 import { useAuth } from '@/lib/auth'
 
 export const TODOS = 'TODOS'
@@ -9,9 +10,13 @@ interface Contexto {
   temporadaId: string
   campoId: string
   centroCostoId: string
+  /** Mes en curso. Vive aquí y no en cada pantalla: el costo, la liquidación
+   *  y los indicadores tienen que estar mirando siempre el mismo. */
+  mes: string
   setTemporadaId: (v: string) => void
   setCampoId: (v: string) => void
   setCentroCostoId: (v: string) => void
+  setMes: (v: string) => void
   /** Nombres ya resueltos, para no repetir la búsqueda en cada pantalla. */
   temporadaNombre: string
   campoNombre: string
@@ -56,14 +61,15 @@ export function ProveedorContexto({ children }: { children: ReactNode }) {
     [campoBloqueado],
   )
   const [centroCostoId, setCentroCostoId] = useState(() => guardado.centroCostoId ?? TODOS)
+  const [mes, setMes] = useState(() => guardado.mes ?? mesActual())
 
   useEffect(() => {
     try {
-      localStorage.setItem(CLAVE, JSON.stringify({ temporadaId, campoId, centroCostoId }))
+      localStorage.setItem(CLAVE, JSON.stringify({ temporadaId, campoId, centroCostoId, mes }))
     } catch {
       /* almacenamiento bloqueado */
     }
-  }, [temporadaId, campoId, centroCostoId])
+  }, [temporadaId, campoId, centroCostoId, mes])
 
   /* Si alguien borra del maestro el elemento que estaba seleccionado, el filtro
      vuelve a "todos" en vez de quedar apuntando a algo que ya no existe. */
@@ -76,14 +82,14 @@ export function ProveedorContexto({ children }: { children: ReactNode }) {
 
   const valor = useMemo<Contexto>(
     () => ({
-      temporadaId, campoId: campoEfectivo, centroCostoId,
-      setTemporadaId, setCampoId, setCentroCostoId,
+      temporadaId, campoId: campoEfectivo, centroCostoId, mes,
+      setTemporadaId, setCampoId, setCentroCostoId, setMes,
       temporadaNombre: buscarNodo(maestros.temporadas, temporadaId)?.nombre ?? 'Todas',
       campoNombre: buscarNodo(maestros.campos, campoEfectivo)?.nombre ?? 'Todos',
       centroCostoNombre: buscarNodo(maestros.centrosCosto, centroCostoId)?.nombre ?? 'Todos',
       campoBloqueado,
     }),
-    [maestros, temporadaId, campoId, campoEfectivo, campoBloqueado, setCampoId, centroCostoId],
+    [maestros, temporadaId, campoId, campoEfectivo, campoBloqueado, setCampoId, centroCostoId, mes],
   )
 
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>

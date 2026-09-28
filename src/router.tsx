@@ -11,9 +11,10 @@ const Home = lazy(() => import('@/pages/Home'))
 const PlanCuentas = lazy(() => import('@/pages/PlanCuentas'))
 const Trabajadores = lazy(() => import('@/pages/Trabajadores'))
 const Asistencia = lazy(() => import('@/pages/Asistencia'))
+const Sueldos = lazy(() => import('@/pages/Sueldos'))
+const Indicadores = lazy(() => import('@/pages/Indicadores'))
+const Especies = lazy(() => import('@/pages/Especies'))
 const TomarAsistencia = lazy(() => import('@/pages/TomarAsistencia'))
-const Tarja = lazy(() => import('@/pages/Tarja'))
-const Semillas = lazy(() => import('@/pages/Semillas'))
 const Labores = lazy(() => import('@/pages/Labores'))
 const CentrosCosto = lazy(() => import('@/pages/CentrosCosto'))
 const Campos = lazy(() => import('@/pages/Campos'))
@@ -50,11 +51,12 @@ export const router = createBrowserRouter([
       { path: 'rrhh', element: <Navigate to="/rrhh/trabajadores" replace /> },
       { path: 'rrhh/trabajadores', element: pagina(Trabajadores, 'rrhh') },
       { path: 'rrhh/asistencia', element: pagina(Asistencia, 'rrhh') },
-      { path: 'rrhh/tomar-asistencia', element: pagina(TomarAsistencia, 'rrhh') },
-      { path: 'rrhh/tarja', element: pagina(Tarja, 'rrhh') },
-      { path: 'rrhh/semillas', element: pagina(Semillas, 'rrhh') },
+      { path: 'rrhh/sueldos', element: pagina(Sueldos, 'rrhh') },
+      { path: 'indicadores', element: pagina(Indicadores, 'cuentas') },
+      { path: 'rrhh/tomar-asistencia', element: pagina(TomarAsistencia, 'pasar-lista') },
 
       { path: 'maestros/labores', element: pagina(Labores, 'maestros') },
+      { path: 'maestros/especies', element: pagina(Especies, 'maestros') },
       { path: 'maestros/centros-costo', element: pagina(CentrosCosto, 'maestros') },
       { path: 'maestros/campos', element: pagina(Campos, 'maestros') },
       { path: 'maestros/temporadas', element: pagina(Temporadas, 'maestros') },

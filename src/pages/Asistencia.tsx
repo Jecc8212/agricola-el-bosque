@@ -13,7 +13,7 @@ import { pesoLegible } from '@/lib/imagen'
 import { TODOS, useContextoOperacion } from '@/lib/contexto'
 import { cn } from '@/lib/cn'
 import { CLP, fecha as formatearFecha } from '@/lib/formato'
-import { etiquetaMes, mesActual, mesesDisponibles } from '@/lib/mes'
+import { etiquetaMes } from '@/lib/mes'
 import { aplanar, buscarNodo, rutaDe, useMaestros } from '@/lib/maestros'
 import type { Nodo, RegistroAsistencia } from '@/lib/maestros'
 import { formatearRut } from '@/lib/rut'
@@ -166,11 +166,18 @@ export default function Asistencia() {
   /* Reabrir un acta es deshacer un respaldo ante la Mutual: sólo quien
      administra el sistema. Al jefe de campo ni se le ofrece. */
   const puedeReabrir = puedeVer('sistema')
+  /**
+   * Las actas se filtran aparte de los registros, y arrancan en **el día de
+   * hoy**. Un mes cargado son treinta y tantas tarjetas: mostrarlas todas de
+   * entrada llena la pantalla de historia justo cuando lo que se busca es lo
+   * de hoy.
+   */
+  const [modoActa, setModoActa] = useState<'dia' | 'mes'>('dia')
+  const [diaActa, setDiaActa] = useState(() => new Date().toISOString().slice(0, 10))
   const [viendoFoto, setViendoFoto] = useState<string | null>(null)
   const [reabriendo, setReabriendo] = useState<string | null>(null)
-  const { temporadaId, campoId, centroCostoId } = useContextoOperacion()
+  const { temporadaId, campoId, centroCostoId, mes } = useContextoOperacion()
 
-  const [mes, setMes] = useState(mesActual)
   const [editando, setEditando] = useState<RegistroAsistencia | null>(null)
   const [borrando, setBorrando] = useState<RegistroAsistencia | null>(null)
   /* La barra de registro no es un formulario en modal, así que su confirmación
@@ -217,8 +224,20 @@ export default function Asistencia() {
   const jornadasDelMes = useMemo(
     () =>
       jornadas
-        .filter((j) => j.fecha.startsWith(mes) && (campoId === TODOS || j.campoId === campoId))
+        .filter((j) => {
+          if (campoId !== TODOS && j.campoId !== campoId) return false
+          return modoActa === 'dia' ? j.fecha === diaActa : j.fecha.startsWith(mes)
+        })
         .sort((a, b) => b.fecha.localeCompare(a.fecha)),
+    [jornadas, mes, campoId, modoActa, diaActa],
+  )
+
+  /** Para saber si el vacío es «no hay nada» o «no hay nada ese día». */
+  const actasEnElMes = useMemo(
+    () =>
+      jornadas.filter(
+        (j) => j.fecha.startsWith(mes) && (campoId === TODOS || j.campoId === campoId),
+      ).length,
     [jornadas, mes, campoId],
   )
 
@@ -372,27 +391,49 @@ export default function Asistencia() {
     <Pagina
       titulo="Asistencia"
       descripcion="Un registro por día y por persona. La modalidad decide si el día cuenta para la liquidación y a qué cuenta imputa; la labor dice qué se hizo y trae su bono."
-      acciones={
-        <div className="flex items-center gap-2">
-          <label className="sr-only" htmlFor="mes-asistencia">Mes de liquidación</label>
-          <select
-            id="mes-asistencia" value={mes} onChange={(e) => setMes(e.target.value)}
-            className={cn(control, 'cursor-pointer font-medium')}
-          >
-            {mesesDisponibles().map((m) => (
-              <option key={m} value={m}>{etiquetaMes(m)}</option>
-            ))}
-          </select>
-        </div>
-      }
     >
       {/* Las actas cerradas van arriba: son el documento del día, y lo que
           alguien viene a buscar cuando pregunta «¿se entregó el EPP?». */}
-      {jornadasDelMes.length > 0 && (
+      {actasEnElMes > 0 && (
         <div className="mb-5">
-          <p className="mb-2 text-2xs font-semibold tracking-wide text-ink-muted">
-            JORNADAS CERRADAS · {etiquetaMes(mes)}
-          </p>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-2xs font-semibold tracking-wide text-ink-muted">
+              JORNADAS CERRADAS
+            </p>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex rounded-lg bg-surface-sunken p-0.5">
+                {(['dia', 'mes'] as const).map((m) => (
+                  <button
+                    key={m} type="button" onClick={() => setModoActa(m)}
+                    aria-pressed={modoActa === m}
+                    className={cn(
+                      'cursor-pointer rounded-md px-3 py-1 text-sm transition-all duration-150',
+                      modoActa === m
+                        ? 'bg-surface font-medium text-ink shadow-xs'
+                        : 'text-ink-faint hover:text-ink',
+                    )}
+                  >
+                    {m === 'dia' ? 'Por día' : 'Por mes'}
+                  </button>
+                ))}
+              </span>
+
+              {modoActa === 'dia' ? (
+                <input
+                  type="date" aria-label="Día de las actas" value={diaActa}
+                  onChange={(e) => setDiaActa(e.target.value)}
+                  className={cn(control, 'w-40')}
+                />
+              ) : (
+                <span className="text-sm text-ink-faint">{etiquetaMes(mes)}</span>
+              )}
+
+              <span aria-live="polite" className="text-2xs text-ink-faint">
+                {jornadasDelMes.length} de {actasEnElMes} en el mes
+              </span>
+            </div>
+          </div>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {jornadasDelMes.map((j) => (
               <div key={j.id} className="rounded-md border border-line bg-surface p-3.5">
@@ -435,6 +476,14 @@ export default function Asistencia() {
               </div>
             ))}
           </div>
+
+          {jornadasDelMes.length === 0 && (
+            <p className="rounded-xl border border-line bg-surface px-4 py-6 text-center text-sm text-ink-faint">
+              {modoActa === 'dia'
+                ? `Sin jornada cerrada el ${formatearFecha(diaActa)}. Cambia el día, o mira el mes completo.`
+                : `Sin jornadas cerradas en ${etiquetaMes(mes)}.`}
+            </p>
+          )}
         </div>
       )}
 

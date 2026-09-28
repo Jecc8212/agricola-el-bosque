@@ -2,6 +2,7 @@ import { useId } from 'react'
 import { NavLink } from 'react-router-dom'
 import { TODOS, useContextoOperacion } from '@/lib/contexto'
 import { aplanar, useMaestros } from '@/lib/maestros'
+import { etiquetaMes, mesesDisponibles } from '@/lib/mes'
 import type { Nodo } from '@/lib/maestros'
 import { cn } from '@/lib/cn'
 
@@ -58,8 +59,8 @@ function Filtro({
 export function BarraFiltros() {
   const { maestros } = useMaestros()
   const {
-    temporadaId, campoId, centroCostoId, campoBloqueado,
-    setTemporadaId, setCampoId, setCentroCostoId,
+    temporadaId, campoId, centroCostoId, campoBloqueado, mes,
+    setTemporadaId, setCampoId, setCentroCostoId, setMes,
   } = useContextoOperacion()
 
   const activos = [temporadaId, campoBloqueado ? TODOS : campoId, centroCostoId]
@@ -93,6 +94,23 @@ export function BarraFiltros() {
           opciones={maestros.centrosCosto} etiquetaTodos="Todos los centros"
           vacio="Aún sin centros de costo"
         />
+
+        {/* El mes manda sobre todo lo que se mide: costo, liquidación e
+            indicadores. Por eso vive aquí y no repetido en cada pantalla. */}
+        <div className="flex items-center gap-1.5">
+          <label htmlFor="filtro-mes" className="shrink-0 text-2xs font-medium tracking-wide text-ink-faint">
+            MES
+          </label>
+          <select
+            id="filtro-mes" value={mes} onChange={(e) => setMes(e.target.value)}
+            className={cn(
+              'h-8 w-40 cursor-pointer rounded-sm border border-line-strong bg-surface px-2 text-base text-ink',
+              'transition-colors duration-150 ease-out',
+            )}
+          >
+            {mesesDisponibles().map((m) => <option key={m} value={m}>{etiquetaMes(m)}</option>)}
+          </select>
+        </div>
 
         {activos > 0 && (
           <button
