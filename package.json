@@ -1,7 +1,7 @@
 {
   "name": "agricola-el-bosque",
   "private": true,
-  "version": "0.1.0",
+  "version": "2.1.0",
   "type": "module",
   "description": "Agrícola El Bosque Ltda.",
   "scripts": {

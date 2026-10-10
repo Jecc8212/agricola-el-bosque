@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { Sidebar } from '@/components/Sidebar'
 import { BarraFiltros } from '@/components/BarraFiltros'
 import { Marca } from '@/components/Marca'
+import { PieVersion } from '@/components/PieVersion'
 import { nombreRol, useAuth } from '@/lib/auth'
 
 /** Rutas donde la franja de filtros no pinta nada. */
@@ -114,6 +115,10 @@ export function Layout() {
         <main id="contenido" className="min-w-0 flex-1 px-4 py-6 sm:px-6">
           <Outlet />
         </main>
+
+        {/* Al final de la columna, no fijo: un pie pegado a la ventana tapa
+            la última fila de cualquier tabla larga. */}
+        <PieVersion />
       </div>
     </div>
   )

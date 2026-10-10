@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Marca } from '@/components/Marca'
+import { PieVersion } from '@/components/PieVersion'
 import { CUENTAS_INICIALES, ROL_NOMBRE, useAuth } from '@/lib/auth'
 
 /**
@@ -140,6 +141,10 @@ export function Login() {
           </div>
         )}
       </div>
+
+      {/* También acá: así se puede comprobar qué versión está publicada sin
+          necesidad de entrar al sistema. */}
+      <PieVersion />
     </div>
   )
 }
