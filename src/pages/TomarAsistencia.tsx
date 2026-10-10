@@ -9,6 +9,7 @@ import { TODOS, useContextoOperacion } from '@/lib/contexto'
 import { CLP, fecha as formatearFecha } from '@/lib/formato'
 import { reducirFoto, pesoLegible } from '@/lib/imagen'
 import { aplanar, buscarNodo, useMaestros } from '@/lib/maestros'
+import { imputacionDeModalidad } from '@/lib/vigencia'
 import { formatearRut } from '@/lib/rut'
 import { nombreCompleto } from '@/lib/types'
 import type { Trabajador } from '@/lib/types'
@@ -221,12 +222,39 @@ export default function TomarAsistencia() {
      corrige las excepciones del día. */
   const modalidadDe = (t: Trabajador) =>
     modalidades[t.rut] ?? t.modalidadId ?? opModalidades[0]?.nodo.id ?? ''
-  const centroDe = (t: Trabajador) => centros[t.rut] ?? t.centroCostoId ?? ''
+
+  /**
+   * Lo que la modalidad impone ese día, según el tramo de vigencia que regía.
+   * «Día nochero» ya trae su labor y su centro; «día agrícola» no trae ninguno
+   * y los elige quien pasa lista.
+   */
+  const reglaDe = (t: Trabajador) => imputacionDeModalidad(maestros, modalidadDe(t), fecha)
+
+  /**
+   * Las labores del día. La que impone la modalidad va **siempre** y primero:
+   * sin ella en la tarja no habría forma de informar después cuánto costó
+   * «nochero», que es justo el motivo de parametrizarla.
+   *
+   * El estado guarda sólo las que se agregaron a mano, así que cambiar de
+   * modalidad recalcula la automática sin arrastrar la anterior.
+   */
+  const laboresDelDia = (t: Trabajador): string[] => {
+    const auto = reglaDe(t).laborId
+    const aMano = (labores[t.rut] ?? []).filter((id) => id !== auto)
+    return auto ? [auto, ...aMano] : aMano
+  }
+
+  /* Si la modalidad trae centro de costo, manda ella: un nochero imputado a un
+     cuartel de cerezos sería un costo agrícola que nadie hizo en el campo. */
+  const centroDe = (t: Trabajador) =>
+    reglaDe(t).centroCostoId ?? centros[t.rut] ?? t.centroCostoId ?? ''
+  const centroImpuesto = (t: Trabajador) => Boolean(reglaDe(t).centroCostoId)
   const sinCentro = vinieron.filter((t) => !centroDe(t))
+  const sinCuenta = vinieron.filter((t) => !reglaDe(t).cuentaId)
 
   /** El bono de la labor sólo se paga con el EPP firmado. */
   const bonoDe = (t: Trabajador) =>
-    (labores[t.rut] ?? []).reduce((s, id) => s + (buscarNodo(maestros.labores, id)?.bono ?? 0), 0)
+    laboresDelDia(t).reduce((s, id) => s + (buscarNodo(maestros.labores, id)?.bono ?? 0), 0)
   const bonoEnRiesgo = vinieron
     .filter((t) => !epp.has(t.rut))
     .reduce((s, t) => s + bonoDe(t), 0)
@@ -249,13 +277,22 @@ export default function TomarAsistencia() {
       },
       nomina.map((t) => {
         const presente = presentes.has(t.rut)
+        const modalidadId = presente ? modalidadDe(t) : motivos[t.rut]
+        /* La imputación se resuelve aquí y se guarda en el registro. Volver a
+           resolverla al leer haría que cambiar el plan de cuentas mañana
+           moviera lo que se imputó hoy. */
+        const regla = imputacionDeModalidad(maestros, modalidadId, fecha)
         return {
           rut: t.rut, fecha, temporadaId: temporadaDeLaJornada,
-          modalidadId: presente ? modalidadDe(t) : motivos[t.rut],
-          centroCostoId: centroDe(t),
-          laborIds: presente ? (labores[t.rut] ?? []) : [],
+          modalidadId,
+          centroCostoId: presente
+            ? centroDe(t)
+            : (regla.centroCostoId ?? t.centroCostoId ?? ''),
+          laborIds: presente ? laboresDelDia(t) : [],
           presente,
           eppEntregado: presente && epp.has(t.rut),
+          cuentaId: regla.cuentaId,
+          vigenciaId: regla.vigenciaId,
         }
       }),
     )
@@ -464,8 +501,13 @@ export default function TomarAsistencia() {
                             <span className="text-2xs tracking-wide text-ink-faint">CENTRO DE COSTO</span>
                             <select
                               value={centroDe(t)}
+                              disabled={centroImpuesto(t)}
                               onChange={(e) => setCentros((c) => ({ ...c, [t.rut]: e.target.value }))}
-                              className={cn(control, 'w-full cursor-pointer', !centroDe(t) && 'border-warning')}
+                              className={cn(
+                                control, 'w-full cursor-pointer',
+                                !centroDe(t) && 'border-warning',
+                                centroImpuesto(t) && 'cursor-default bg-surface-sunken text-ink-muted',
+                              )}
                             >
                               <option value="">{opCentros.length ? 'Sin asignar' : 'Sin centros cargados'}</option>
                               {opCentros.map(({ nodo, nivel }) => (
@@ -474,6 +516,9 @@ export default function TomarAsistencia() {
                                 </option>
                               ))}
                             </select>
+                            {centroImpuesto(t) && (
+                              <span className="text-2xs text-ink-faint">Lo fija la modalidad</span>
+                            )}
                           </label>
 
                           <div className="flex flex-col gap-1">
@@ -483,32 +528,50 @@ export default function TomarAsistencia() {
                             {/* Desplegables normales, uno por labor. La lista
                                 múltiple obligaba a saber que se marca con Ctrl,
                                 y en el campo eso no lo sabe nadie. */}
-                            {[...(labores[t.rut] ?? []), ''].map((elegida, indice) => (
-                              <select
-                                key={indice}
-                                aria-label={`Labor ${indice + 1} de ${nombreCompleto(t)}`}
-                                value={elegida}
-                                onChange={(e) =>
-                                  setLabores((l) => {
-                                    const suyas = [...(l[t.rut] ?? [])]
-                                    if (e.target.value) suyas[indice] = e.target.value
-                                    else suyas.splice(indice, 1)
-                                    return { ...l, [t.rut]: suyas.filter(Boolean) }
-                                  })
-                                }
-                                className={cn(control, 'w-full cursor-pointer')}
-                              >
-                                <option value="">
-                                  {indice === 0 ? 'Sin labor' : '+ agregar otra labor'}
-                                </option>
-                                {opLabores.map(({ nodo, nivel }) => (
-                                  <option key={nodo.id} value={nodo.id}>
-                                    {`${'\u00a0\u00a0'.repeat(nivel)}${nodo.nombre}`}
-                                    {(nodo.bono ?? 0) > 0 ? ` · ${CLP.format(nodo.bono ?? 0)}` : ''}
-                                  </option>
-                                ))}
-                              </select>
-                            ))}
+                            {(() => {
+                              const auto = reglaDe(t).laborId
+                              const aMano = (labores[t.rut] ?? []).filter((id) => id !== auto)
+                              return (
+                                <>
+                                  {/* La que impone la modalidad no se quita: es
+                                      la que permite costear «nochero» aparte. */}
+                                  {auto && (
+                                    <span className="flex flex-wrap items-baseline gap-1.5 rounded-lg bg-primary-tint px-2.5 py-1.5 text-sm text-primary-text">
+                                      {buscarNodo(maestros.labores, auto)?.nombre ?? 'Labor eliminada'}
+                                      <span className="text-2xs opacity-75">la fija la modalidad</span>
+                                    </span>
+                                  )}
+                                  {[...aMano, ''].map((elegida, indice) => (
+                                    <select
+                                      key={indice}
+                                      aria-label={`Labor ${indice + 1} de ${nombreCompleto(t)}`}
+                                      value={elegida}
+                                      onChange={(e) =>
+                                        setLabores((l) => {
+                                          const suyas = (l[t.rut] ?? []).filter((id) => id !== auto)
+                                          if (e.target.value) suyas[indice] = e.target.value
+                                          else suyas.splice(indice, 1)
+                                          return { ...l, [t.rut]: suyas.filter(Boolean) }
+                                        })
+                                      }
+                                      className={cn(control, 'w-full cursor-pointer')}
+                                    >
+                                      <option value="">
+                                        {indice === 0 && !auto ? 'Sin labor' : '+ agregar otra labor'}
+                                      </option>
+                                      {opLabores
+                                        .filter(({ nodo }) => nodo.id !== auto)
+                                        .map(({ nodo, nivel }) => (
+                                          <option key={nodo.id} value={nodo.id}>
+                                            {`${'\u00a0\u00a0'.repeat(nivel)}${nodo.nombre}`}
+                                            {(nodo.bono ?? 0) > 0 ? ` · ${CLP.format(nodo.bono ?? 0)}` : ''}
+                                          </option>
+                                        ))}
+                                    </select>
+                                  ))}
+                                </>
+                              )
+                            })()}
                           </div>
                         </div>
 
@@ -547,6 +610,9 @@ export default function TomarAsistencia() {
                 {bonoEnRiesgo > 0 && (
                   <Dato etiqueta="BONO NO PAGADO" valor={CLP.format(bonoEnRiesgo)} tono="aviso" />
                 )}
+                {sinCuenta.length > 0 && (
+                  <Dato etiqueta="SIN CUENTA" valor={String(sinCuenta.length)} tono="aviso" />
+                )}
                 {sinCentro.length > 0 && (
                   <Dato etiqueta="SIN CENTRO" valor={String(sinCentro.length)} tono="aviso" />
                 )}
@@ -555,7 +621,9 @@ export default function TomarAsistencia() {
               <Tarjeta className="mt-3 divide-y divide-line overflow-hidden">
                 {nomina.map((t) => {
                   const presente = presentes.has(t.rut)
-                  const suyas = (labores[t.rut] ?? [])
+                  /* Las del día, no las tecleadas: la que impone la modalidad
+                     también cuenta y tiene que verse antes de cerrar. */
+                  const suyas = laboresDelDia(t)
                     .map((id) => buscarNodo(maestros.labores, id)?.nombre)
                     .filter(Boolean)
                   return (

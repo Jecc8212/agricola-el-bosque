@@ -16,6 +16,7 @@ import { CLP, fecha as formatearFecha } from '@/lib/formato'
 import { etiquetaMes } from '@/lib/mes'
 import { aplanar, buscarNodo, rutaDe, useMaestros } from '@/lib/maestros'
 import type { Nodo, RegistroAsistencia } from '@/lib/maestros'
+import { imputacionDeModalidad, imputacionDeRegistro } from '@/lib/vigencia'
 import { formatearRut } from '@/lib/rut'
 import { nombreCompleto } from '@/lib/types'
 import type { Trabajador } from '@/lib/types'
@@ -259,15 +260,23 @@ export default function Asistencia() {
     if (!persona) return setError('Busca y elige un trabajador.')
     if (!modalidadNueva) return setError('Falta la modalidad.')
     if (!temporadaParaRegistrar) return setError('No hay temporadas cargadas en el maestro.')
+    /* La misma regla que en la toma de asistencia: si la modalidad trae labor
+       o centro, mandan ellos, y la cuenta queda congelada en el registro. */
+    const regla = imputacionDeModalidad(maestros, modalidadNueva, fechaNueva)
+    const laborIds = regla.laborId
+      ? [regla.laborId, ...(laborNueva && laborNueva !== regla.laborId ? [laborNueva] : [])]
+      : laborNueva ? [laborNueva] : []
     setPorConfirmar({
       rut: persona.rut,
       fecha: fechaNueva,
       temporadaId: temporadaParaRegistrar,
       modalidadId: modalidadNueva,
-      laborIds: laborNueva ? [laborNueva] : [],
+      laborIds,
       presente: true,
       eppEntregado: false,
-      centroCostoId: centroNuevo,
+      centroCostoId: regla.centroCostoId ?? centroNuevo,
+      cuentaId: regla.cuentaId,
+      vigenciaId: regla.vigenciaId,
     })
     setError('')
   }
@@ -318,6 +327,9 @@ export default function Asistencia() {
       Labor: laboresDe(r.laborIds).map((l) => l.nombre).join(' + '),
       Modalidad: m?.nombre ?? '',
       'Centro de costo': buscarNodo(maestros.centrosCosto, r.centroCostoId)?.nombre ?? '',
+      /* La cuenta del día, tal como quedó imputada: es lo que permite informar
+         cuánto costó una labor sin rehacer el cálculo a mano. */
+      Cuenta: rutaDe(maestros.cuentas, imputacionDeRegistro(maestros, r).cuentaId),
       'Suma día': m?.factor ?? 0,
     }
   })
@@ -596,7 +608,10 @@ export default function Asistencia() {
               const m = modalidadDe(r.modalidadId)
               const ls = laboresDe(r.laborIds)
               const factor = m?.factor ?? 0
-              const cuenta = rutaDe(maestros.cuentas, m?.cuentaId)
+              /* La cuenta que se muestra es la que quedó imputada ese día, no
+               la que la modalidad diga ahora: cambiar el plan de cuentas no
+               puede reescribir lo que ya se registró. */
+            const cuenta = rutaDe(maestros.cuentas, imputacionDeRegistro(maestros, r).cuentaId)
               return (
                 <tr key={r.id} className="border-b border-line last:border-0 transition-colors duration-100 hover:bg-surface-sunken/50">
                   <td className="whitespace-nowrap px-3 py-1.5 font-medium">
@@ -673,10 +688,20 @@ export default function Asistencia() {
           mensajeConfirmacion="Se guardarán los cambios de este día registrado."
           onCerrar={() => setEditando(null)}
           onGuardar={(v) => {
+            /* Corregir un registro sí recalcula su imputación: es una decisión
+               explícita sobre ese día, no un cambio de configuración
+               arrastrándose hacia atrás. */
+            const regla = imputacionDeModalidad(maestros, v.modalidadId, v.fecha)
+            const laborIds = regla.laborId
+              ? [regla.laborId, ...(v.laborId && v.laborId !== regla.laborId ? [v.laborId] : [])]
+              : v.laborId ? [v.laborId] : []
             actualizarAsistencia(editando.id, {
               fecha: v.fecha, temporadaId: v.temporadaId,
-              laborIds: v.laborId ? [v.laborId] : [],
-              modalidadId: v.modalidadId, centroCostoId: v.centroCostoId,
+              laborIds,
+              modalidadId: v.modalidadId,
+              centroCostoId: regla.centroCostoId ?? v.centroCostoId,
+              cuentaId: regla.cuentaId,
+              vigenciaId: regla.vigenciaId,
             })
             setEditando(null)
           }}

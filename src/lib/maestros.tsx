@@ -20,6 +20,36 @@ export const ETAPA_LABEL: Record<EtapaPlanta, string> = {
   ADULTA: 'Adulta · producción',
 }
 
+/**
+ * Una parametrización de modalidad con fecha de vigencia.
+ *
+ * El plan de cuentas cambia, las labores se reorganizan y los centros de costo
+ * se renombran, pero lo que se imputó en un período cerrado no puede moverse:
+ * un balance de 2026 que cambia porque en 2027 alguien editó una cuenta no es
+ * un balance. Por eso la relación modalidad–cuenta no es un campo que se pisa,
+ * sino una lista de tramos con fecha: se **agrega** uno nuevo y el anterior se
+ * cierra el día antes, conservando lo que decía.
+ */
+export interface ParamModalidad {
+  id: string
+  /** Vigente desde, inclusive (YYYY-MM-DD). */
+  desde: string
+  /** Vigente hasta, inclusive. Sin esto, el tramo sigue abierto. */
+  hasta?: string
+  /** A qué cuenta del master imputa. Es lo mínimo que define un tramo. */
+  cuentaId: string
+  /**
+   * Labor que la modalidad impone por sí sola. «Día nochero» ya dice qué se
+   * hizo; «día agrícola» no, y ahí la elige quien pasa lista.
+   */
+  laborId?: string
+  /** Centro de costo que la modalidad impone. Mismo criterio que la labor. */
+  centroCostoId?: string
+  /** Quién hizo el cambio y cuándo. Una parametrización sin autor no se audita. */
+  creadoEn: string
+  creadoPor: string
+}
+
 export interface Nodo {
   id: string
   nombre: string
@@ -30,8 +60,15 @@ export interface Nodo {
    * un número libre: son las únicas fracciones con las que se liquida.
    */
   factor?: number
-  /** Modalidades: a qué cuenta del master imputa. */
+  /**
+   * Modalidades: a qué cuenta imputaba antes de que existieran las vigencias.
+   * Se conserva sólo para migrar lo ya guardado — la fuente de verdad es
+   * `vigencias`, y nada nuevo debería leer este campo.
+   * @deprecated
+   */
   cuentaId?: string
+  /** Modalidades: la parametrización por tramos de fecha. Ver ParamModalidad. */
+  vigencias?: ParamModalidad[]
   /** Labores: incentivo que se paga por hacer esta labor. */
   bono?: number
   /**
@@ -108,6 +145,17 @@ export interface RegistroAsistencia {
   tratoCantidad?: number
   /** Jornada que lo cerró. Sin esto, el registro es suelto y editable. */
   jornadaId?: string
+  /**
+   * La cuenta a la que se imputó este día, congelada al registrarlo.
+   *
+   * Es redundante con la parametrización —se podría volver a resolver por
+   * fecha— y esa redundancia es justo el punto: si mañana alguien corrige por
+   * error un tramo de vigencia pasado, esto no se mueve. El histórico vive en
+   * la tarja, no en la configuración.
+   */
+  cuentaId?: string
+  /** Qué tramo de vigencia se aplicó. El rastro para auditar la imputación. */
+  vigenciaId?: string
 }
 
 /**
@@ -293,6 +341,31 @@ export function buscarNodo(lista: Nodo[], id: string | undefined): Nodo | undefi
   return undefined
 }
 
+/**
+ * El tramo de parametrización que regía en esa fecha.
+ *
+ * Las fechas van en ISO (YYYY-MM-DD), así que compararlas como texto ordena
+ * igual que como fechas y evita arrastrar husos horarios a una decisión
+ * contable. Si hubiera más de un tramo aplicable —no debería, pero un maestro
+ * editado a mano puede solaparse—, gana el que empieza más tarde.
+ */
+export function vigenciaEn(
+  modalidad: Nodo | undefined,
+  fecha: string,
+): ParamModalidad | undefined {
+  const tramos = modalidad?.vigencias
+  if (!tramos?.length) return undefined
+  return tramos
+    .filter((v) => v.desde <= fecha && (!v.hasta || fecha <= v.hasta))
+    .sort((a, b) => b.desde.localeCompare(a.desde))[0]
+}
+
+/** El día anterior en ISO, sin pasar por la zona horaria local. */
+export function diaAnterior(iso: string): string {
+  const [a, m, d] = iso.split('-').map(Number)
+  return new Date(Date.UTC(a, m - 1, d) - 86400000).toISOString().slice(0, 10)
+}
+
 /** Ruta legible: "Costos › Operacional › Mano de obra". */
 export function rutaDe(lista: Nodo[], id: string | undefined): string {
   if (!id) return ''
@@ -316,6 +389,10 @@ interface Api {
   actualizar: (c: Catalogo, id: string, cambios: Partial<Nodo>) => void
   eliminar: (c: Catalogo, id: string) => void
   mover: (c: Catalogo, id: string, delta: number) => void
+  /** Abre un tramo nuevo de parametrización y cierra el que estaba abierto. */
+  agregarVigencia: (modalidadId: string, datos: Omit<ParamModalidad, 'id' | 'creadoEn'>) => void
+  /** Deshace el último tramo y reabre el anterior. Sólo el último. */
+  eliminarVigencia: (modalidadId: string, vigenciaId: string) => void
   jornadas: Jornada[]
   /** Cierra el acta del día y deja sus registros sellados. */
   cerrarJornada: (
@@ -370,8 +447,34 @@ function fusionar(guardado: Partial<Maestros>): Maestros {
   return salida
 }
 
+/**
+ * Lo que ya estaba guardado tenía la cuenta pegada a la modalidad, sin fecha.
+ * Se convierte en un primer tramo que arranca «desde siempre», porque eso es
+ * exactamente lo que significaba: regía para todo lo registrado hasta hoy.
+ * Sin esta conversión, las modalidades que ya existen quedarían sin imputar y
+ * la asistencia histórica perdería su cuenta.
+ */
+function migrarVigencias(m: Maestros): Maestros {
+  let cambio = false
+  const modalidades = m.modalidades.map((n) => {
+    if (n.vigencias?.length || !n.cuentaId) return n
+    cambio = true
+    return {
+      ...n,
+      vigencias: [{
+        id: nuevoId(),
+        desde: '1900-01-01',
+        cuentaId: n.cuentaId,
+        creadoEn: new Date().toISOString(),
+        creadoPor: 'migración automática',
+      }],
+    }
+  })
+  return cambio ? { ...m, modalidades } : m
+}
+
 export function ProveedorMaestros({ children }: { children: ReactNode }) {
-  const [maestros, setMaestros] = useState<Maestros>(() => fusionar(leer(CLAVE_M, {})))
+  const [maestros, setMaestros] = useState<Maestros>(() => migrarVigencias(fusionar(leer(CLAVE_M, {}))))
   /* Los registros de versiones anteriores traían una sola labor y no sabían de
      presencia ni de EPP: se normalizan al leerlos, para que ninguna pantalla
      tropiece con un `undefined`. */
@@ -496,6 +599,78 @@ export function ProveedorMaestros({ children }: { children: ReactNode }) {
   }, [])
 
   /**
+   * Agrega un tramo de parametrización.
+   *
+   * No pisa el anterior: lo **cierra** el día antes de que empiece el nuevo.
+   * Ese es todo el mecanismo que hace que cambiar la cuenta hoy no mueva lo
+   * imputado el año pasado. Un tramo que empieza el mismo día que otro sí lo
+   * reemplaza: es una corrección de algo escrito hace un momento, no historia.
+   */
+  const agregarVigencia = useCallback(
+    (modalidadId: string, datos: Omit<ParamModalidad, 'id' | 'creadoEn'>) => {
+      setMaestros((m) => ({
+        ...m,
+        modalidades: mapear(m.modalidades, modalidadId, (n) => {
+          const otras = (n.vigencias ?? []).filter((v) => v.desde !== datos.desde)
+
+          /* Cualquier tramo que todavía cubriera el día de inicio se corta ahí,
+             tenga o no fecha de término. Antes sólo se cerraban los abiertos, y
+             un tramo ya cerrado más allá de esa fecha quedaba solapado con el
+             nuevo: dos parametrizaciones distintas rigiendo el mismo día. */
+          const previas = otras.map((v) =>
+            v.desde < datos.desde && (!v.hasta || v.hasta >= datos.desde)
+              ? { ...v, hasta: diaAnterior(datos.desde) }
+              : v,
+          )
+
+          /* Si ya hay un tramo posterior, el nuevo termina el día antes: la
+             línea de tiempo queda partida sin huecos y sin superposiciones. */
+          const siguiente = previas
+            .filter((v) => v.desde > datos.desde)
+            .sort((a, b) => a.desde.localeCompare(b.desde))[0]
+          const tramo: ParamModalidad = {
+            ...datos,
+            hasta: datos.hasta ?? (siguiente ? diaAnterior(siguiente.desde) : undefined),
+            id: nuevoId(),
+            creadoEn: new Date().toISOString(),
+          }
+
+          return {
+            ...n,
+            vigencias: [...previas, tramo].sort((a, b) => a.desde.localeCompare(b.desde)),
+          }
+        }),
+      }))
+    },
+    [],
+  )
+
+  /**
+   * Borra el último tramo y reabre el que cerró.
+   *
+   * Sólo el último, y sólo reabre si el cierre lo había puesto este mismo
+   * tramo: una fecha de término escrita a mano es una decisión de alguien y no
+   * se deshace sola. Los tramos anteriores no se tocan nunca — son el
+   * histórico, y poder borrarlos sería lo mismo que no tenerlo.
+   */
+  const eliminarVigencia = useCallback((modalidadId: string, vigenciaId: string) => {
+    setMaestros((m) => ({
+      ...m,
+      modalidades: mapear(m.modalidades, modalidadId, (n) => {
+        const tramos = [...(n.vigencias ?? [])].sort((a, b) => a.desde.localeCompare(b.desde))
+        const ultimo = tramos.at(-1)
+        if (!ultimo || ultimo.id !== vigenciaId) return n
+        const resto = tramos.slice(0, -1)
+        const previo = resto.at(-1)
+        if (previo && previo.hasta === diaAnterior(ultimo.desde)) {
+          resto[resto.length - 1] = { ...previo, hasta: undefined }
+        }
+        return { ...n, vigencias: resto }
+      }),
+    }))
+  }, [])
+
+  /**
    * Cierra la jornada en un solo movimiento: crea el acta y sus registros
    * juntos. Si se hicieran por separado, un fallo a medias dejaría registros
    * huérfanos apuntando a un acta que no existe.
@@ -567,11 +742,13 @@ export function ProveedorMaestros({ children }: { children: ReactNode }) {
     () => ({
       maestros, asistencia, trabajadores, jornadas, cerrarJornada, reabrirJornada,
       agregar, actualizar, eliminar, mover, importarRamas, numerarCatalogo,
+      agregarVigencia, eliminarVigencia,
       guardarTrabajador, eliminarTrabajador,
       agregarAsistencia, actualizarAsistencia, eliminarAsistencia, restaurarMaestros,
     }),
     [maestros, asistencia, trabajadores, jornadas, cerrarJornada, reabrirJornada,
      agregar, actualizar, eliminar, mover, importarRamas, numerarCatalogo,
+     agregarVigencia, eliminarVigencia,
      guardarTrabajador, eliminarTrabajador,
      agregarAsistencia, actualizarAsistencia, eliminarAsistencia, restaurarMaestros],
   )
