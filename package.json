@@ -9,7 +9,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "deploy": "vercel --prod --yes"
+    "deploy": "npx --yes vercel@latest --prod --yes"
   },
   "dependencies": {
     "jspdf": "^4.2.1",
