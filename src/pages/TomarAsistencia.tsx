@@ -249,6 +249,22 @@ export default function TomarAsistencia() {
   const centroDe = (t: Trabajador) =>
     reglaDe(t).centroCostoId ?? centros[t.rut] ?? t.centroCostoId ?? ''
   const centroImpuesto = (t: Trabajador) => Boolean(reglaDe(t).centroCostoId)
+
+  /**
+   * Las opciones de centro para una persona.
+   *
+   * La lista general se acota al campo de la jornada, pero el centro que impone
+   * la modalidad puede ser de otro campo —un nochero imputa a Administración
+   * General, que vive en Local Central—. Si no se agrega aquí, el desplegable
+   * no encuentra su propia opción y muestra «Sin asignar» sobre un valor que sí
+   * está guardado: parece un error y no lo es.
+   */
+  const opCentrosDe = (t: Trabajador) => {
+    const impuesto = reglaDe(t).centroCostoId
+    if (!impuesto || opCentros.some(({ nodo }) => nodo.id === impuesto)) return opCentros
+    const fila = aplanar(maestros.centrosCosto).find(({ nodo }) => nodo.id === impuesto)
+    return fila ? [fila, ...opCentros] : opCentros
+  }
   const sinCentro = vinieron.filter((t) => !centroDe(t))
   const sinCuenta = vinieron.filter((t) => !reglaDe(t).cuentaId)
 
@@ -510,7 +526,7 @@ export default function TomarAsistencia() {
                               )}
                             >
                               <option value="">{opCentros.length ? 'Sin asignar' : 'Sin centros cargados'}</option>
-                              {opCentros.map(({ nodo, nivel }) => (
+                              {opCentrosDe(t).map(({ nodo, nivel }) => (
                                 <option key={nodo.id} value={nodo.id}>
                                   {`${'— '.repeat(nivel)}${nodo.nombre}`}
                                 </option>
