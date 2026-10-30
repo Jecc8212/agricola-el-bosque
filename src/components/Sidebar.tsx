@@ -35,6 +35,8 @@ const SECCIONES: Seccion[] = [
     clave: 'maestros',
     titulo: 'Maestros',
     items: [
+      { to: '/maestros/cargos', label: 'Cargos' },
+      { to: '/maestros/epp', label: 'Elementos de protección' },
       { to: '/maestros/labores', label: 'Labores' },
       { to: '/maestros/especies', label: 'Especies y variedades' },
       { to: '/maestros/centros-costo', label: 'Centros de costo' },

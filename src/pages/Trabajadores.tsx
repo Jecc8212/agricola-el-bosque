@@ -11,7 +11,6 @@ import type { Fila } from '@/lib/planilla'
 import { FormularioModal } from '@/components/ui/FormularioModal'
 import type { CampoForm } from '@/components/ui/FormularioModal'
 import { ModalConfirmar } from '@/components/ui/Modal'
-import { CARGOS, CARGO_POR_CODIGO } from '@/data/cargos'
 import { cn } from '@/lib/cn'
 import { CLP, antiguedad, fecha } from '@/lib/formato'
 import { esRutValido, formatearRut } from '@/lib/rut'
@@ -42,16 +41,18 @@ function Dato({ label, children }: { label: string; children: React.ReactNode })
 }
 
 function FichaTrabajador({
-  t, onCerrar, onEditar, onEliminar, campoDeFicha,
+  t, onCerrar, onEditar, onEliminar, campoDeFicha, cargoDeFicha,
 }: {
   t: Trabajador
   onCerrar: () => void
   onEditar: () => void
   onEliminar: () => void
   campoDeFicha?: string
+  cargoDeFicha?: string
 }) {
   const reduce = useReducedMotion()
-  const cargo = CARGO_POR_CODIGO.get(t.cargo)
+  /* El nombre llega resuelto desde la lista, igual que el del campo: la ficha
+     no conoce los maestros. */
   const panel = useDialogo(true, onCerrar)
 
   return (
@@ -91,7 +92,7 @@ function FichaTrabajador({
               lo es, en vez de afirmar lo contrario. */}
           <section className="mt-5 rounded-md border border-line bg-surface p-3.5">
             <p className="text-2xs font-medium tracking-wide text-ink-faint">CARGO</p>
-            <p className="mt-1.5 text-base font-medium">{cargo?.nombre ?? 'Cargo desconocido'}</p>
+            <p className="mt-1.5 text-base font-medium">{cargoDeFicha ?? 'Cargo eliminado'}</p>
             <p className="mt-1.5 text-2xs text-ink-faint">
               La cuenta a la que imputa cada día la define su modalidad, no el cargo.
             </p>
@@ -168,8 +169,11 @@ export default function Trabajadores() {
       { tipo: 'texto', id: 'rut', etiqueta: 'RUT', valor: t ? formatearRut(t.rut) : '', requerido: true, placeholder: '12.345.678-5' },
       { tipo: 'texto', id: 'nombres', etiqueta: 'Nombres', valor: t?.nombres ?? '', requerido: true },
       { tipo: 'texto', id: 'apellidos', etiqueta: 'Apellidos', valor: t?.apellidos ?? '', requerido: true },
-      { tipo: 'select', id: 'cargo', etiqueta: 'Cargo', valor: t?.cargo ?? CARGOS[0].codigo, requerido: true,
-        opciones: CARGOS.map((c) => ({ valor: c.codigo, etiqueta: `${c.nombre} · cuenta ${c.cuenta}` })) },
+      { tipo: 'select', id: 'cargo', etiqueta: 'Cargo', valor: t?.cargo ?? maestros.cargos[0]?.id ?? '', requerido: true,
+        opciones: aplanar(maestros.cargos).map(({ nodo }) => ({
+          valor: nodo.id,
+          etiqueta: `${nodo.codigo ? `${nodo.codigo} ` : ''}${nodo.nombre}`,
+        })) },
       { tipo: 'select', id: 'campoId', etiqueta: 'Campo', valor: t?.campoId ?? maestros.campos[0]?.id ?? '', requerido: true,
         opciones: aplanar(maestros.campos).map(({ nodo, nivel }) => ({
           valor: nodo.id, etiqueta: `${'— '.repeat(nivel)}${nodo.nombre}`,
@@ -258,7 +262,7 @@ export default function Trabajadores() {
     Nombres: t.nombres,
     Apellidos: t.apellidos,
     Tipo: CLASE_LABEL[t.clase ?? 'AGRICOLA'],
-    Cargo: CARGO_POR_CODIGO.get(t.cargo)?.nombre ?? t.cargo,
+    Cargo: buscarNodo(maestros.cargos, t.cargo)?.nombre ?? t.cargo,
     Campo: nombreCampo(t.campoId) ?? '',
     'Centro de costo': buscarNodo(maestros.centrosCosto, t.centroCostoId)?.nombre ?? '',
     Modalidad: buscarNodo(maestros.modalidades, t.modalidadId)?.nombre ?? '',
@@ -277,7 +281,7 @@ export default function Trabajadores() {
     Nombres: 'María Elena',
     Apellidos: 'Rojas Pérez',
     Tipo: CLASE_LABEL.AGRICOLA,
-    Cargo: CARGOS[0].nombre,
+    Cargo: maestros.cargos[0]?.nombre ?? 'Podador',
     Campo: maestros.campos[0]?.nombre ?? 'Buin',
     'Centro de costo': maestros.centrosCosto[0]?.nombre ?? '',
     Modalidad: modalidadesDePago[0]?.nodo.nombre ?? 'Al día',
@@ -299,7 +303,9 @@ export default function Trabajadores() {
    */
   function importarNomina(filas: Record<string, unknown>[]): string {
     if (filas.length === 0) throw new Error('La planilla está vacía.')
-    const porCargo = new Map(CARGOS.map((c) => [normalizar(c.nombre), c.codigo]))
+    const porCargo = new Map(
+      aplanar(maestros.cargos).map(({ nodo }) => [normalizar(nodo.nombre), nodo.id]),
+    )
     const porCampo = new Map(
       aplanar(maestros.campos).map(({ nodo }) => [normalizar(nodo.nombre), nodo.id]),
     )
@@ -418,7 +424,7 @@ export default function Trabajadores() {
           </thead>
           <tbody>
             {filtrados.map((t) => {
-              const cargo = CARGO_POR_CODIGO.get(t.cargo)
+              const cargo = buscarNodo(maestros.cargos, t.cargo)
               return (
                 <tr
                   key={t.rut} tabIndex={0} onClick={() => setSeleccionado(t)}
@@ -506,6 +512,7 @@ export default function Trabajadores() {
             onEditar={() => setEditando(seleccionado)}
             onEliminar={() => setBorrando(seleccionado)}
             campoDeFicha={nombreCampo(seleccionado.campoId)}
+            cargoDeFicha={buscarNodo(maestros.cargos, seleccionado.cargo)?.nombre}
           />
         )}
       </AnimatePresence>

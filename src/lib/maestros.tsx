@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { Trabajador } from '@/lib/types'
+import type { TipoTrabajador, Trabajador } from '@/lib/types'
 import { CLAVE, leer, escribir, guardarEvidencia } from '@/lib/almacen'
 
 /**
@@ -104,12 +104,29 @@ export interface Nodo {
   hectareas?: number
   /** Plantas en el cuartel, para la densidad de plantación. */
   plantas?: number
+  /**
+   * Cargos: agrícola o administrativo.
+   *
+   * No decide el sueldo —eso lo hace la clase del trabajador— sino para qué
+   * sirve el cargo al agrupar: un informe de mano de obra directa no mezcla
+   * podadores con administrativos.
+   */
+  tipo?: TipoTrabajador
+  /**
+   * Cargos y labores: qué equipo de protección exige.
+   *
+   * El mismo campo sirve a los dos porque la exigencia viene de ambos lados:
+   * un cargo lleva su EPP permanente —el nochero, su linterna y su chaleco— y
+   * una labor agrega el suyo del día: aplicar químicos exige respirador use
+   * quien lo use.
+   */
+  eppIds?: string[]
   hijos: Nodo[]
 }
 
 export type Catalogo =
   | 'cuentas' | 'centrosCosto' | 'campos' | 'temporadas' | 'modalidades' | 'labores'
-  | 'especies'
+  | 'especies' | 'cargos' | 'epp'
 
 export interface Maestros {
   cuentas: Nodo[]
@@ -120,6 +137,10 @@ export interface Maestros {
   labores: Nodo[]
   /** Especie en el primer nivel, variedad en el segundo. */
   especies: Nodo[]
+  /** Qué hace cada persona. Antes era una lista fija en el código. */
+  cargos: Nodo[]
+  /** Elementos de protección personal, para exigirlos por cargo y por labor. */
+  epp: Nodo[]
 }
 
 /** Un registro de asistencia es un día de una persona. La liquidación de sueldo
@@ -211,6 +232,8 @@ export const PROFUNDIDAD: Record<Catalogo, number> = {
   modalidades: 1,   // lista plana: una modalidad no tiene subcategorías
   labores: 3,       // labor, sublabor y detalle
   especies: 2,      // especie y variedad
+  cargos: 1,        // lista plana: un cargo no tiene subcargos
+  epp: 1,           // lista plana de elementos
 }
 
 export const NOMBRE_CATALOGO: Record<Catalogo, string> = {
@@ -221,6 +244,8 @@ export const NOMBRE_CATALOGO: Record<Catalogo, string> = {
   modalidades: 'Modalidades',
   labores: 'Labores',
   especies: 'Especies y variedades',
+  cargos: 'Cargos',
+  epp: 'Elementos de protección',
 }
 
 let contador = 0
@@ -245,6 +270,53 @@ export const CAMPO_ID = {
   LOCAL_CENTRAL: 'campo-local-central',
   OTROS: 'campo-otros',
 } as const
+
+/* ── Elementos de protección ───────────────────────────────────────────────
+   Ids fijos para poder exigirlos desde los cargos y las labores sin que un
+   renombre rompa la exigencia.                                             */
+export const EPP_ID = {
+  CASCO: 'epp-casco',
+  GUANTES: 'epp-guantes',
+  BOTAS: 'epp-botas',
+  ANTIPARRAS: 'epp-antiparras',
+  AUDITIVO: 'epp-auditivo',
+  RESPIRADOR: 'epp-respirador',
+  CHALECO: 'epp-chaleco',
+  TRAJE: 'epp-traje',
+} as const
+
+/* ── Cargos ────────────────────────────────────────────────────────────────
+   Eran una lista fija en el código, sin pantalla ni forma de administrarlos.
+   Los ids se conservan derivados de los códigos antiguos para que las fichas
+   de personal ya cargadas sigan apuntando a su cargo tras la migración.
+
+   Y no traen cuenta contable: la imputación sale de la modalidad de cada día,
+   y tener dos sitios que dicen a qué cuenta va el gasto es pedir una
+   contradicción.                                                           */
+export const CARGO_ID = {
+  COSECHERO: 'cargo-cosechero',
+  PODADOR: 'cargo-podador',
+  APLICADOR: 'cargo-aplicador',
+  FERTILIZADOR: 'cargo-fertilizador',
+  DESBROTADOR: 'cargo-desbrotador',
+  TRACTORISTA: 'cargo-tractorista',
+  SUPERVISOR: 'cargo-supervisor',
+  ADMIN: 'cargo-admin',
+  NOCHERO: 'cargo-nochero',
+} as const
+
+/** Del código antiguo al id del maestro, para migrar las fichas guardadas. */
+export const CARGO_ANTIGUO: Record<string, string> = {
+  COSECHERO: CARGO_ID.COSECHERO,
+  PODADOR: CARGO_ID.PODADOR,
+  APLICADOR: CARGO_ID.APLICADOR,
+  FERTILIZADOR: CARGO_ID.FERTILIZADOR,
+  DESBROTADOR: CARGO_ID.DESBROTADOR,
+  TRACTORISTA: CARGO_ID.TRACTORISTA,
+  SUPERVISOR: CARGO_ID.SUPERVISOR,
+  ADMIN: CARGO_ID.ADMIN,
+  NOCHERO: CARGO_ID.NOCHERO,
+}
 
 /* ── Semilla ────────────────────────────────────────────────────────────────
    Los campos vienen con los cinco reales de la empresa más "Otros", y se
@@ -293,6 +365,40 @@ function semilla(): Maestros {
       nodo('Raleo', { codigo: '04', bono: 0, precio: 0, unidad: 'planta' }),
       nodo('Fertilización', { codigo: '05', bono: 0, precio: 0, unidad: 'hilera' }),
       nodo('Aplicaciones químicas', { codigo: '06', bono: 0, precio: 0, unidad: 'hectárea' }),
+    ],
+    /* El equipo de protección más común. La empresa lo amplía según lo que
+       entregue de verdad. */
+    epp: [
+      { id: EPP_ID.CASCO, nombre: 'Casco', codigo: '01', hijos: [] },
+      { id: EPP_ID.GUANTES, nombre: 'Guantes', codigo: '02', hijos: [] },
+      { id: EPP_ID.BOTAS, nombre: 'Botas de seguridad', codigo: '03', hijos: [] },
+      { id: EPP_ID.ANTIPARRAS, nombre: 'Antiparras', codigo: '04', hijos: [] },
+      { id: EPP_ID.AUDITIVO, nombre: 'Protector auditivo', codigo: '05', hijos: [] },
+      { id: EPP_ID.RESPIRADOR, nombre: 'Respirador', codigo: '06', hijos: [] },
+      { id: EPP_ID.CHALECO, nombre: 'Chaleco reflectante', codigo: '07', hijos: [] },
+      { id: EPP_ID.TRAJE, nombre: 'Traje de aplicación', codigo: '08', hijos: [] },
+    ],
+    /* Los nueve cargos que estaban escritos en el código, ahora editables y
+       con el equipo que cada uno exige por el solo hecho de desempeñarlo. */
+    cargos: [
+      { id: CARGO_ID.COSECHERO, nombre: 'Cosechero', codigo: '01', tipo: 'AGRICOLA',
+        eppIds: [EPP_ID.GUANTES, EPP_ID.BOTAS], hijos: [] },
+      { id: CARGO_ID.PODADOR, nombre: 'Podador', codigo: '02', tipo: 'AGRICOLA',
+        eppIds: [EPP_ID.CASCO, EPP_ID.GUANTES, EPP_ID.BOTAS, EPP_ID.ANTIPARRAS], hijos: [] },
+      { id: CARGO_ID.APLICADOR, nombre: 'Aplicador', codigo: '03', tipo: 'AGRICOLA',
+        eppIds: [EPP_ID.TRAJE, EPP_ID.RESPIRADOR, EPP_ID.GUANTES, EPP_ID.BOTAS, EPP_ID.ANTIPARRAS], hijos: [] },
+      { id: CARGO_ID.FERTILIZADOR, nombre: 'Fertilizador', codigo: '04', tipo: 'AGRICOLA',
+        eppIds: [EPP_ID.GUANTES, EPP_ID.BOTAS, EPP_ID.RESPIRADOR], hijos: [] },
+      { id: CARGO_ID.DESBROTADOR, nombre: 'Desbrotador', codigo: '05', tipo: 'AGRICOLA',
+        eppIds: [EPP_ID.GUANTES, EPP_ID.BOTAS], hijos: [] },
+      { id: CARGO_ID.TRACTORISTA, nombre: 'Tractorista', codigo: '06', tipo: 'AGRICOLA',
+        eppIds: [EPP_ID.CASCO, EPP_ID.AUDITIVO, EPP_ID.BOTAS, EPP_ID.CHALECO], hijos: [] },
+      { id: CARGO_ID.SUPERVISOR, nombre: 'Supervisor de campo', codigo: '07', tipo: 'ADMINISTRATIVO',
+        eppIds: [EPP_ID.CASCO, EPP_ID.BOTAS, EPP_ID.CHALECO], hijos: [] },
+      { id: CARGO_ID.ADMIN, nombre: 'Administrativo', codigo: '08', tipo: 'ADMINISTRATIVO',
+        eppIds: [], hijos: [] },
+      { id: CARGO_ID.NOCHERO, nombre: 'Nochero', codigo: '09', tipo: 'ADMINISTRATIVO',
+        eppIds: [EPP_ID.CHALECO, EPP_ID.BOTAS], hijos: [] },
     ],
     /* Especies y variedades salen de las fichas del maestro agrícola. Van sólo
        las dos que aparecen en los ejemplos; el resto lo carga la empresa. */
@@ -511,9 +617,20 @@ export function ProveedorMaestros({ children }: { children: ReactNode }) {
     ),
   )
 
-  /* La nómina arranca vacía: el personal lo carga la empresa, no lo inventa el
-     sistema. */
-  const [trabajadores, setTrabajadores] = useState<Trabajador[]>(() => leer(CLAVE.trabajadores, []))
+  /**
+   * La nómina arranca vacía: el personal lo carga la empresa, no lo inventa el
+   * sistema.
+   *
+   * Las fichas guardadas antes traían el cargo como un código de texto
+   * —`PODADOR`— porque los cargos vivían en el código. Ahora apuntan al
+   * maestro por identificador, igual que ya hacían con el campo, así que
+   * renombrar un cargo deja de romper nada.
+   */
+  const [trabajadores, setTrabajadores] = useState<Trabajador[]>(() =>
+    leer<Trabajador[]>(CLAVE.trabajadores, []).map((t) =>
+      CARGO_ANTIGUO[t.cargo] ? { ...t, cargo: CARGO_ANTIGUO[t.cargo] } : t,
+    ),
+  )
 
   useEffect(() => { escribir(CLAVE.maestros, maestros) }, [maestros])
   useEffect(() => { escribir(CLAVE.asistencia, asistencia) }, [asistencia])

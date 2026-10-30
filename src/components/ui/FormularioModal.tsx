@@ -10,6 +10,18 @@ export type CampoForm =
       tipo: 'select'; id: string; etiqueta: string; valor?: string; requerido?: boolean; ayuda?: string
       opciones: Array<{ valor: string; etiqueta: string }>
     }
+  /**
+   * Varias opciones a la vez, como casillas.
+   *
+   * El valor viaja como texto separado por comas porque el formulario entero
+   * trabaja con texto; quien lo recibe lo parte. Se usan casillas y no una
+   * lista múltiple porque marcar con Ctrl es un saber que no todo el mundo
+   * tiene, y en una ficha de EPP equivocarse significa no exigir un guante.
+   */
+  | {
+      tipo: 'casillas'; id: string; etiqueta: string; valor?: string; ayuda?: string
+      opciones: Array<{ valor: string; etiqueta: string }>
+    }
 
 /**
  * Formulario en modal a partir de una lista de campos. Existe para que los
@@ -109,7 +121,33 @@ export function FormularioModal({
               )}
             </label>
 
-            {c.tipo === 'select' ? (
+            {c.tipo === 'casillas' ? (
+              <div className="flex flex-col gap-1.5 rounded-sm border border-line-strong bg-surface p-2.5">
+                {c.opciones.length === 0 && (
+                  <span className="text-2xs text-ink-faint">No hay opciones cargadas todavía.</span>
+                )}
+                {c.opciones.map((o) => {
+                  const marcadas = (valores[c.id] ?? '').split(',').filter(Boolean)
+                  const puesta = marcadas.includes(o.valor)
+                  return (
+                    <label key={o.valor} className="flex cursor-pointer items-center gap-2 text-base">
+                      <input
+                        type="checkbox" checked={puesta}
+                        onChange={() =>
+                          set(
+                            c.id,
+                            (puesta ? marcadas.filter((m) => m !== o.valor) : [...marcadas, o.valor])
+                              .join(','),
+                          )
+                        }
+                        className="h-4 w-4 cursor-pointer accent-primary"
+                      />
+                      {o.etiqueta}
+                    </label>
+                  )
+                })}
+              </div>
+            ) : c.tipo === 'select' ? (
               <select
                 id={`f-${c.id}`} className={`${clases} cursor-pointer`}
                 value={valores[c.id]} onChange={(e) => set(c.id, e.target.value)}

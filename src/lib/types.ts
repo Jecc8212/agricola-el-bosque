@@ -17,20 +17,11 @@ export const CLASE_LABEL: Record<ClaseTrabajador, string> = {
 }
 export type EstadoTrabajador = 'ACTIVO' | 'FINIQUITADO' | 'LICENCIA'
 
-/** Cada cargo apunta a una cuenta del plan financiero. Ése es el puente entre
- *  la ficha de personal y el asiento contable: nadie elige la cuenta a mano. */
-export interface Cargo {
-  codigo: string
-  nombre: string
-  tipo: TipoTrabajador
-  cuenta: string
-  cuentaNombre: string
-}
-
 export interface Trabajador {
   rut: string
   nombres: string
   apellidos: string
+  /** Id de un nodo del maestro de cargos. Antes era un código de texto. */
   cargo: string
   /** Id de un nodo del maestro de campos. */
   campoId: string

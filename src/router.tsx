@@ -4,6 +4,8 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { Layout } from '@/components/Layout'
 import { SinAcceso } from '@/components/SinAcceso'
 import { useAuth } from '@/lib/auth'
+const Cargos = lazy(() => import('@/pages/Cargos'))
+const Epp = lazy(() => import('@/pages/Epp'))
 const Respaldo = lazy(() => import('@/pages/Respaldo'))
 
 /* Cada módulo viaja en su propio archivo: quien entra a ver la asistencia no
@@ -56,6 +58,8 @@ export const router = createBrowserRouter([
       { path: 'indicadores', element: pagina(Indicadores, 'cuentas') },
       { path: 'rrhh/tomar-asistencia', element: pagina(TomarAsistencia, 'pasar-lista') },
 
+      { path: 'maestros/cargos', element: pagina(Cargos, 'maestros') },
+      { path: 'maestros/epp', element: pagina(Epp, 'maestros') },
       { path: 'maestros/labores', element: pagina(Labores, 'maestros') },
       { path: 'maestros/especies', element: pagina(Especies, 'maestros') },
       { path: 'maestros/centros-costo', element: pagina(CentrosCosto, 'maestros') },

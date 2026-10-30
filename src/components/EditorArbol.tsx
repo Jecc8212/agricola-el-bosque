@@ -139,6 +139,8 @@ export function EditorArbol({
     if ('precio' in v) cambios.precio = Number(v.precio) || 0
     if ('unidad' in v) cambios.unidad = v.unidad.trim() || undefined
     if ('porTrato' in v) cambios.porTrato = v.porTrato === 'si'
+    if ('tipo' in v) cambios.tipo = (v.tipo || undefined) as Nodo['tipo']
+    if ('eppIds' in v) cambios.eppIds = v.eppIds.split(',').filter(Boolean)
     return cambios
   }
 
