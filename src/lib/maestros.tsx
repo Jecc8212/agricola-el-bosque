@@ -135,8 +135,14 @@ export interface RegistroAsistencia {
   /** Vino a trabajar. La modalidad lo refleja, pero se guarda explícito:
    *  es el dato que se marcó al pasar lista, no una deducción. */
   presente: boolean
-  /** Firmó la entrega de su equipo de protección personal. */
-  eppEntregado: boolean
+  /**
+   * Usaba correctamente su equipo de protección personal.
+   *
+   * No es lo mismo que habérselo entregado: la entrega es trimestral y se
+   * controla como un movimiento de inventario. Esto es la verificación visual
+   * del día, la que hace el jefe de campo al pasar lista.
+   */
+  eppUsado: boolean
   /**
    * Trato: cuántas unidades hizo ese día. El monto sale de multiplicarla por el
    * precio de la labor, y de ahí salen los días equivalentes para semana
@@ -174,8 +180,16 @@ export interface Jornada {
   /** Cuándo y quién la cerró. */
   cerradaEn: string
   cerradaPor: string
-  /** Foto de la hoja firmada, ya reducida. */
-  fotoEpp?: string
+  /**
+   * Foto de la hoja firmada de la **charla de seguridad**, ya reducida.
+   *
+   * No es la hoja de entrega de EPP: esa pertenece a un registro de
+   * inventario, con su propio ritmo trimestral. Esta respalda que la charla
+   * del día se dio y quiénes la recibieron.
+   */
+  fotoCharla?: string
+  /** De qué trató la charla. Una foto sin tema respalda la mitad. */
+  temaCharla?: string
   presentes: number
   ausentes: number
   /** Reabierta por quien administra. El acta y su foto se conservan: son la
@@ -479,14 +493,27 @@ export function ProveedorMaestros({ children }: { children: ReactNode }) {
      presencia ni de EPP: se normalizan al leerlos, para que ninguna pantalla
      tropiece con un `undefined`. */
   const [asistencia, setAsistencia] = useState<RegistroAsistencia[]>(() =>
-    leer<Array<RegistroAsistencia & { laborId?: string }>>(CLAVE_A, []).map((r) => ({
+    leer<Array<RegistroAsistencia & { laborId?: string; eppEntregado?: boolean }>>(
+      CLAVE_A,
+      [],
+    ).map((r) => ({
       ...r,
       laborIds: r.laborIds ?? (r.laborId ? [r.laborId] : []),
       presente: r.presente ?? true,
-      eppEntregado: r.eppEntregado ?? false,
+      /* Lo registrado antes marcaba la entrega del EPP. Se arrastra el valor
+         porque es la misma casilla, pero conviene saber que en esos días
+         significaba otra cosa. */
+      eppUsado: r.eppUsado ?? r.eppEntregado ?? false,
     })),
   )
-  const [jornadas, setJornadas] = useState<Jornada[]>(() => leer(CLAVE_J, []))
+  /* Las actas guardadas llamaban `fotoEpp` a la foto. Es la misma imagen y se
+     conserva; lo que cambia es qué dice que respalda. */
+  const [jornadas, setJornadas] = useState<Jornada[]>(() =>
+    leer<Array<Jornada & { fotoEpp?: string }>>(CLAVE_J, []).map((j) => ({
+      ...j,
+      fotoCharla: j.fotoCharla ?? j.fotoEpp,
+    })),
+  )
 
   /* La nómina arranca vacía: el personal lo carga la empresa, no lo inventa el
      sistema. */

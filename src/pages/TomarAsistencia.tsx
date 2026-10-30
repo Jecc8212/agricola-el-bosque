@@ -16,6 +16,9 @@ import type { Trabajador } from '@/lib/types'
 
 type Paso = 1 | 2 | 3 | 4
 
+/** Hasta cuántos días atrás se puede pasar lista. */
+const DIAS_ATRAS = 7
+
 const PASOS: Array<{ n: Paso; titulo: string; ayuda: string }> = [
   { n: 1, titulo: 'Asistencia', ayuda: 'Quién vino a trabajar hoy' },
   { n: 2, titulo: 'Labor y EPP', ayuda: 'Qué hace cada uno y su equipo' },
@@ -144,7 +147,17 @@ export default function TomarAsistencia() {
   const { temporadaId, campoId, campoNombre } = useContextoOperacion()
 
   const [paso, setPaso] = useState<Paso>(1)
-  const [fecha] = useState(() => new Date().toISOString().slice(0, 10))
+  /**
+   * La fecha de la jornada, elegible hacia atrás.
+   *
+   * Antes era el día de hoy sin alternativa, y eso obligaba a que lo no
+   * registrado en el momento quedara con la fecha equivocada. Se puede
+   * retroceder hasta una semana: suficiente para cubrir un atraso real, poco
+   * para reescribir un mes ya cerrado.
+   */
+  const hoy = new Date().toISOString().slice(0, 10)
+  const minimaFecha = new Date(Date.now() - DIAS_ATRAS * 86400000).toISOString().slice(0, 10)
+  const [fecha, setFecha] = useState(hoy)
   const [presentes, setPresentes] = useState<Set<string>>(new Set())
   const [motivos, setMotivos] = useState<Record<string, string>>({})
   const [labores, setLabores] = useState<Record<string, string[]>>({})
@@ -152,6 +165,7 @@ export default function TomarAsistencia() {
   const [centros, setCentros] = useState<Record<string, string>>({})
   const [epp, setEpp] = useState<Set<string>>(new Set())
   const [foto, setFoto] = useState<string | null>(null)
+  const [tema, setTema] = useState('')
   const [error, setError] = useState('')
   const [confirmando, setConfirmando] = useState(false)
   const [listo, setListo] = useState<{ presentes: number; ausentes: number } | null>(null)
@@ -285,11 +299,12 @@ export default function TomarAsistencia() {
   }
 
   function finalizar() {
-    if (!foto) return setError('Falta la foto de la hoja firmada.')
+    if (!foto) return setError('Falta la foto de la hoja firmada de la charla.')
     const jornada = cerrarJornada(
       {
         campoId: campoDeLaJornada, fecha, temporadaId: temporadaDeLaJornada,
-        cerradaEn: new Date().toISOString(), cerradaPor: sesion?.usuario ?? '', fotoEpp: foto,
+        cerradaEn: new Date().toISOString(), cerradaPor: sesion?.usuario ?? '',
+        fotoCharla: foto, temaCharla: tema.trim() || undefined,
       },
       nomina.map((t) => {
         const presente = presentes.has(t.rut)
@@ -306,7 +321,7 @@ export default function TomarAsistencia() {
             : (regla.centroCostoId ?? t.centroCostoId ?? ''),
           laborIds: presente ? laboresDelDia(t) : [],
           presente,
-          eppEntregado: presente && epp.has(t.rut),
+          eppUsado: presente && epp.has(t.rut),
           cuentaId: regla.cuentaId,
           vigenciaId: regla.vigenciaId,
         }
@@ -359,6 +374,23 @@ export default function TomarAsistencia() {
           </p>
         </div>
 
+        {/* La fecha sólo se elige en el primer paso: una vez que hay labores y
+            EPP marcados, cambiarla dejaría ese trabajo apuntando a otro día. */}
+        <label className="flex items-center gap-2 text-2xs font-medium tracking-wide text-ink-faint">
+          DÍA
+          {paso === 1 ? (
+            <input
+              type="date" value={fecha} min={minimaFecha} max={hoy}
+              onChange={(e) => { if (e.target.value) setFecha(e.target.value) }}
+              className={cn(control, 'cursor-pointer font-medium')}
+            />
+          ) : (
+            <span className={cn(control, 'flex items-center bg-surface-sunken font-medium text-ink-muted')}>
+              {formatearFecha(fecha)}
+            </span>
+          )}
+        </label>
+
         <label className="flex items-center gap-2 text-2xs font-medium tracking-wide text-ink-faint">
           TEMPORADA
           {puedeElegirTemporada ? (
@@ -378,6 +410,12 @@ export default function TomarAsistencia() {
           )}
         </label>
       </header>
+
+      {fecha !== hoy && (
+        <p role="status" className="mt-4 rounded-lg bg-warning-tint px-3 py-2 text-sm text-warning-text">
+          Estás registrando el {formatearFecha(fecha)}, que no es hoy. Revísalo antes de cerrar.
+        </p>
+      )}
 
       <div className="mt-5"><Progreso paso={paso} /></div>
 
@@ -489,7 +527,7 @@ export default function TomarAsistencia() {
                             <span className="mono block text-2xs text-ink-faint">{formatearRut(t.rut)}</span>
                           </span>
                           <span className="flex flex-col items-end gap-1">
-                            <span className="text-2xs tracking-wide text-ink-faint">¿SE ENTREGÓ EPP?</span>
+                            <span className="text-2xs tracking-wide text-ink-faint">¿USA SU EPP?</span>
                             <Segmentado
                               valor={tieneEpp} onCambio={() => alternar(setEpp, t.rut)}
                               izquierda="Sí" derecha="No"
@@ -600,7 +638,7 @@ export default function TomarAsistencia() {
                           )}>
                             {tieneEpp
                               ? `Bono por labor: ${CLP.format(bono)}`
-                              : `Sin EPP no se paga el bono de ${CLP.format(bono)}`}
+                              : `Sin usar su EPP no se paga el bono de ${CLP.format(bono)}`}
                           </p>
                         )}
                       </Tarjeta>
@@ -665,7 +703,7 @@ export default function TomarAsistencia() {
                               'rounded-md px-2 py-1',
                               epp.has(t.rut) ? 'bg-surface-sunken text-ink-muted' : 'bg-warning-tint text-warning-text',
                             )}>
-                              {epp.has(t.rut) ? 'EPP entregado' : 'Sin EPP'}
+                              {epp.has(t.rut) ? 'Usa su EPP' : 'Sin EPP'}
                             </span>
                           </>
                         ) : (
@@ -692,11 +730,23 @@ export default function TomarAsistencia() {
           {paso === 4 && (
             <div className="mt-5">
               <Tarjeta className="p-6">
-                <h2 className="text-lg font-semibold tracking-tight">Foto de la hoja firmada</h2>
+                <h2 className="text-lg font-semibold tracking-tight">Charla de seguridad</h2>
                 <p className="mt-1 max-w-[60ch] text-base text-ink-faint">
-                  Saca una foto de la hoja donde los trabajadores firmaron la entrega de su EPP.
-                  Es el respaldo ante la Mutual, y lo que cierra la jornada.
+                  Saca una foto de la hoja donde los trabajadores firmaron la charla del día.
+                  Es el respaldo de que la charla se dio, y lo que cierra la jornada.
                 </p>
+
+                {/* Una foto sin tema respalda la mitad: dice que hubo charla,
+                    pero no de qué trató. */}
+                <label className="mt-4 flex flex-col gap-1">
+                  <span className="text-2xs tracking-wide text-ink-faint">¿DE QUÉ TRATÓ?</span>
+                  <input
+                    value={tema}
+                    onChange={(e) => setTema(e.target.value)}
+                    placeholder="Uso de motosierra, orden y aseo, trabajo en altura…"
+                    className={cn(control, 'w-full')}
+                  />
+                </label>
 
                 <input
                   ref={archivoFoto} type="file" accept="image/*" capture="environment"
@@ -710,7 +760,7 @@ export default function TomarAsistencia() {
 
                 {foto ? (
                   <div className="mt-5">
-                    <img src={foto} alt="Hoja de entrega de EPP firmada"
+                    <img src={foto} alt="Hoja firmada de la charla de seguridad"
                       className="max-h-80 w-full rounded-lg border border-line object-contain" />
                     <div className="mt-3 flex items-center justify-between gap-3">
                       <span className="text-2xs text-ink-faint">Foto lista · {pesoLegible(foto)}</span>

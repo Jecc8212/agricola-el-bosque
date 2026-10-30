@@ -79,7 +79,7 @@ export default function Home() {
         /* El bono se paga por trabajar **con el EPP puesto**: un día que no
            cuenta, o sin equipo entregado, no lo paga. Es la misma regla que
            usa la liquidación, y tienen que decir lo mismo. */
-        if (factor > 0 && r.eppEntregado)
+        if (factor > 0 && r.eppUsado)
           for (const id of r.laborIds) bonos += buscarNodo(maestros.labores, id)?.bono ?? 0
       }
 

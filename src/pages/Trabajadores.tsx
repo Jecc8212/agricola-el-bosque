@@ -85,17 +85,16 @@ function FichaTrabajador({
             <Chip tone="primary">{campoDeFicha ?? 'Campo eliminado'}</Chip>
           </div>
 
-          {/* El vínculo cargo → cuenta es lo que evita que alguien elija la
-              cuenta a mano al contabilizar. Se muestra explícito. */}
+          {/* El cargo trae una cuenta heredada de cuando no existía el plan
+              editable, y esa cuenta no imputa nada: la imputación sale de la
+              modalidad de cada día. Se muestra como referencia y se dice que
+              lo es, en vez de afirmar lo contrario. */}
           <section className="mt-5 rounded-md border border-line bg-surface p-3.5">
-            <p className="text-2xs font-medium tracking-wide text-ink-faint">IMPUTACIÓN CONTABLE</p>
+            <p className="text-2xs font-medium tracking-wide text-ink-faint">CARGO</p>
             <p className="mt-1.5 text-base font-medium">{cargo?.nombre ?? 'Cargo desconocido'}</p>
-            <div className="mt-2 flex items-baseline gap-2">
-              <span className="mono rounded-xs bg-primary-tint px-1.5 py-0.5 text-sm font-medium text-primary-text">
-                {cargo?.cuenta ?? '—'}
-              </span>
-              <span className="text-sm text-ink-faint">{cargo?.cuentaNombre ?? ''}</span>
-            </div>
+            <p className="mt-1.5 text-2xs text-ink-faint">
+              La cuenta a la que imputa cada día la define su modalidad, no el cargo.
+            </p>
           </section>
 
           <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4">
@@ -364,7 +363,7 @@ export default function Trabajadores() {
   return (
     <Pagina
       titulo="Trabajadores"
-      descripcion="La ficha de personal: el cargo define la cuenta contable, el campo define dónde trabaja, y el sueldo base es lo que alimenta el costo por día de cada centro de costo."
+      descripcion="La ficha de personal: el campo define dónde trabaja y en qué nómina aparece al pasar lista, la modalidad cómo se le paga, y el sueldo base es lo que alimenta el costo por día de cada centro de costo. La cuenta contable no sale de aquí: la define la modalidad de cada día."
       acciones={<Button variant="primary" onClick={() => setEditando(null)}>Nuevo trabajador</Button>}
     >
       <div className="mb-5">
@@ -409,7 +408,6 @@ export default function Trabajadores() {
               <th className="px-3 py-2 text-left font-medium">NOMBRE</th>
               <th className="px-3 py-2 text-left font-medium">TIPO</th>
               <th className="px-3 py-2 text-left font-medium">CARGO</th>
-              <th className="px-3 py-2 text-left font-medium">CUENTA</th>
               <th className="px-3 py-2 text-left font-medium">CAMPO</th>
               <th className="px-3 py-2 text-left font-medium">CENTRO DE COSTO</th>
               <th className="px-3 py-2 text-left font-medium">MODALIDAD</th>
@@ -440,7 +438,6 @@ export default function Trabajadores() {
                     </Chip>
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5">{cargo?.nombre ?? '—'}</td>
-                  <td className="mono whitespace-nowrap px-3 py-1.5 text-ink-faint">{cargo?.cuenta ?? '—'}</td>
                   <td className="px-3 py-1.5">
                     {nombreCampo(t.campoId) ?? <span className="text-warning-text">Campo eliminado</span>}
                   </td>

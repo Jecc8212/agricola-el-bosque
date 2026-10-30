@@ -42,7 +42,7 @@ export interface Liquidacion {
  * bono no se paga: es la palanca que hace que la entrega de EPP importe.
  */
 function bonoDelDia(r: RegistroAsistencia, labores: Nodo[]): number {
-  if (!r.presente || !r.eppEntregado) return 0
+  if (!r.presente || !r.eppUsado) return 0
   return r.laborIds.reduce((s, id) => s + (buscar(labores, id)?.bono ?? 0), 0)
 }
 
@@ -92,7 +92,7 @@ export function liquidar(
   /* Lo que se perdió por no firmar el EPP: se muestra, no se descuenta a
      escondidas. Quien liquida tiene que poder explicarlo. */
   const bonosPerdidosPorEpp = suyos
-    .filter((r) => r.presente && !r.eppEntregado)
+    .filter((r) => r.presente && !r.eppUsado)
     .reduce((s, r) => s + r.laborIds.reduce((x, id) => x + (buscar(labores, id)?.bono ?? 0), 0), 0)
 
   const sueldoBase = valorJornada * diasBase

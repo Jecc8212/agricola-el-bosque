@@ -273,7 +273,7 @@ export default function Asistencia() {
       modalidadId: modalidadNueva,
       laborIds,
       presente: true,
-      eppEntregado: false,
+      eppUsado: false,
       centroCostoId: regla.centroCostoId ?? centroNuevo,
       cuentaId: regla.cuentaId,
       vigenciaId: regla.vigenciaId,
@@ -388,7 +388,7 @@ export default function Asistencia() {
 
       agregarAsistencia({
         rut, fecha, temporadaId: temporadaFila, modalidadId: modalidadFila,
-        laborIds: laborFila ? [laborFila] : [], presente: true, eppEntregado: false,
+        laborIds: laborFila ? [laborFila] : [], presente: true, eppUsado: false,
         centroCostoId: centroFila ?? '',
       })
       cargados++
@@ -472,9 +472,9 @@ export default function Asistencia() {
                   </p>
                 )}
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  {j.fotoEpp ? (
-                    <Button size="sm" onClick={() => setViendoFoto(j.fotoEpp ?? null)}>
-                      Ver hoja firmada
+                  {j.fotoCharla ? (
+                    <Button size="sm" onClick={() => setViendoFoto(j.fotoCharla ?? null)}>
+                      Ver hoja de la charla
                     </Button>
                   ) : (
                     <Chip tone="warning">Sin foto</Chip>
@@ -709,13 +709,13 @@ export default function Asistencia() {
       )}
       {viendoFoto && (
         <Modal
-          titulo="Hoja de entrega de EPP firmada"
+          titulo="Hoja firmada de la charla de seguridad"
           descripcion={`Respaldo ante la Mutual · ${pesoLegible(viendoFoto)}`}
           ancho="max-w-3xl"
           onCerrar={() => setViendoFoto(null)}
           pie={<Button onClick={() => setViendoFoto(null)}>Cerrar</Button>}
         >
-          <img src={viendoFoto} alt="Hoja de entrega de EPP firmada" className="w-full rounded-sm border border-line" />
+          <img src={viendoFoto} alt="Hoja firmada de la charla de seguridad" className="w-full rounded-sm border border-line" />
         </Modal>
       )}
       {reabriendo && (
