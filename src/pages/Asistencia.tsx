@@ -20,6 +20,7 @@ import { imputacionDeModalidad, imputacionDeRegistro } from '@/lib/vigencia'
 import { formatearRut } from '@/lib/rut'
 import { nombreCompleto } from '@/lib/types'
 import type { Trabajador } from '@/lib/types'
+import { leerEvidencia } from '@/lib/almacen'
 
 const opciones = (lista: Nodo[]) =>
   aplanar(lista).map(({ nodo, nivel }) => ({
@@ -472,8 +473,8 @@ export default function Asistencia() {
                   </p>
                 )}
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  {j.fotoCharla ? (
-                    <Button size="sm" onClick={() => setViendoFoto(j.fotoCharla ?? null)}>
+                  {j.evidenciaCharla ? (
+                    <Button size="sm" onClick={() => setViendoFoto(leerEvidencia(j.evidenciaCharla))}>
                       Ver hoja de la charla
                     </Button>
                   ) : (

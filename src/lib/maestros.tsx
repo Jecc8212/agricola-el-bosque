@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Trabajador } from '@/lib/types'
+import { CLAVE, leer, escribir, guardarEvidencia } from '@/lib/almacen'
 
 /**
  * Un solo tipo de nodo sirve a los cinco catálogos. Todos son árboles editables
@@ -181,13 +182,17 @@ export interface Jornada {
   cerradaEn: string
   cerradaPor: string
   /**
-   * Foto de la hoja firmada de la **charla de seguridad**, ya reducida.
+   * Identificador de la foto firmada de la **charla de seguridad**.
+   *
+   * Guarda el id, no la imagen: las evidencias viven en su propia clave. Si
+   * la foto viajara dentro del acta, cada lectura de la lista de jornadas
+   * arrastraría megabytes que nadie va a mirar, y al multiplicarse con
+   * checklists e inspecciones el almacenamiento se llenaría en silencio.
    *
    * No es la hoja de entrega de EPP: esa pertenece a un registro de
-   * inventario, con su propio ritmo trimestral. Esta respalda que la charla
-   * del día se dio y quiénes la recibieron.
+   * inventario, con su propio ritmo trimestral.
    */
-  fotoCharla?: string
+  evidenciaCharla?: string
   /** De qué trató la charla. Una foto sin tema respalda la mitad. */
   temaCharla?: string
   presentes: number
@@ -421,28 +426,6 @@ interface Api {
 }
 
 const Ctx = createContext<Api | null>(null)
-const CLAVE_M = 'aeb.maestros'
-const CLAVE_A = 'aeb.asistencia'
-const CLAVE_T = 'aeb.trabajadores'
-const CLAVE_J = 'aeb.jornadas'
-
-function leer<T>(clave: string, porDefecto: T): T {
-  try {
-    const v = localStorage.getItem(clave)
-    return v ? (JSON.parse(v) as T) : porDefecto
-  } catch {
-    return porDefecto
-  }
-}
-
-function escribir(clave: string, valor: unknown) {
-  try {
-    localStorage.setItem(clave, JSON.stringify(valor))
-  } catch {
-    /* modo privado o almacenamiento bloqueado: seguimos igual */
-  }
-}
-
 /**
  * Lo guardado se fusiona con la semilla en vez de reemplazarla.
  *
@@ -488,13 +471,13 @@ function migrarVigencias(m: Maestros): Maestros {
 }
 
 export function ProveedorMaestros({ children }: { children: ReactNode }) {
-  const [maestros, setMaestros] = useState<Maestros>(() => migrarVigencias(fusionar(leer(CLAVE_M, {}))))
+  const [maestros, setMaestros] = useState<Maestros>(() => migrarVigencias(fusionar(leer(CLAVE.maestros, {}))))
   /* Los registros de versiones anteriores traían una sola labor y no sabían de
      presencia ni de EPP: se normalizan al leerlos, para que ninguna pantalla
      tropiece con un `undefined`. */
   const [asistencia, setAsistencia] = useState<RegistroAsistencia[]>(() =>
     leer<Array<RegistroAsistencia & { laborId?: string; eppEntregado?: boolean }>>(
-      CLAVE_A,
+      CLAVE.asistencia,
       [],
     ).map((r) => ({
       ...r,
@@ -506,23 +489,36 @@ export function ProveedorMaestros({ children }: { children: ReactNode }) {
       eppUsado: r.eppUsado ?? r.eppEntregado ?? false,
     })),
   )
-  /* Las actas guardadas llamaban `fotoEpp` a la foto. Es la misma imagen y se
-     conserva; lo que cambia es qué dice que respalda. */
+  /**
+   * Las actas guardadas traían la imagen dentro, primero como `fotoEpp` y
+   * luego como `fotoCharla`. Al leerlas se mueve a su propia clave y el acta
+   * queda con el identificador. Se hace una sola vez: después ya vienen con
+   * `evidenciaCharla` y no entra en este camino.
+   */
   const [jornadas, setJornadas] = useState<Jornada[]>(() =>
-    leer<Array<Jornada & { fotoEpp?: string }>>(CLAVE_J, []).map((j) => ({
-      ...j,
-      fotoCharla: j.fotoCharla ?? j.fotoEpp,
-    })),
+    leer<Array<Jornada & { fotoEpp?: string; fotoCharla?: string }>>(CLAVE.jornadas, []).map(
+      (j) => {
+        if (j.evidenciaCharla) return j
+        const imagen = j.fotoCharla ?? j.fotoEpp
+        if (!imagen) return j
+        const { fotoCharla: _f, fotoEpp: _e, ...resto } = j
+        /* Si la evidencia no cupo, el acta conserva la imagen donde estaba:
+           perder el respaldo ante la Mutual por una migración sería peor que
+           dejarlo dónde está. */
+        const id = guardarEvidencia(imagen)
+        return id ? { ...resto, evidenciaCharla: id } : j
+      },
+    ),
   )
 
   /* La nómina arranca vacía: el personal lo carga la empresa, no lo inventa el
      sistema. */
-  const [trabajadores, setTrabajadores] = useState<Trabajador[]>(() => leer(CLAVE_T, []))
+  const [trabajadores, setTrabajadores] = useState<Trabajador[]>(() => leer(CLAVE.trabajadores, []))
 
-  useEffect(() => escribir(CLAVE_M, maestros), [maestros])
-  useEffect(() => escribir(CLAVE_A, asistencia), [asistencia])
-  useEffect(() => escribir(CLAVE_T, trabajadores), [trabajadores])
-  useEffect(() => escribir(CLAVE_J, jornadas), [jornadas])
+  useEffect(() => { escribir(CLAVE.maestros, maestros) }, [maestros])
+  useEffect(() => { escribir(CLAVE.asistencia, asistencia) }, [asistencia])
+  useEffect(() => { escribir(CLAVE.trabajadores, trabajadores) }, [trabajadores])
+  useEffect(() => { escribir(CLAVE.jornadas, jornadas) }, [jornadas])
 
   /** Alta y edición en una sola operación: si el RUT ya está, reemplaza. El
    *  RUT original se pasa aparte porque la edición puede corregirlo. */

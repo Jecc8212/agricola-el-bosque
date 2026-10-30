@@ -1,5 +1,6 @@
 import { Component } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
+import { borrarTodo } from '@/lib/almacen'
 
 /**
  * Red de seguridad de toda la aplicación.
@@ -32,9 +33,7 @@ export class Salvavidas extends Component<{ children: ReactNode }, Estado> {
 
   borrarDatos = () => {
     try {
-      for (const clave of Object.keys(localStorage)) {
-        if (clave.startsWith('aeb.')) localStorage.removeItem(clave)
-      }
+      borrarTodo()
     } catch {
       /* almacenamiento bloqueado */
     }

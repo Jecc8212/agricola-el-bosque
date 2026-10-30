@@ -48,6 +48,7 @@ const SECCIONES: Seccion[] = [
     titulo: 'Configuración',
     items: [
       { to: '/sistema/usuarios', label: 'Usuarios y accesos' },
+      { to: '/sistema/respaldo', label: 'Respaldo' },
       { to: '/sistema/design', label: 'Design system' },
     ],
   },

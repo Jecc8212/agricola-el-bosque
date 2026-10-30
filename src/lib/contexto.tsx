@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { buscarNodo, useMaestros } from '@/lib/maestros'
 import { mesActual } from '@/lib/mes'
 import { useAuth } from '@/lib/auth'
+import { CLAVE, leer as leerDe, escribir } from '@/lib/almacen'
 
 export const TODOS = 'TODOS'
 
@@ -26,13 +27,12 @@ interface Contexto {
 }
 
 const Ctx = createContext<Contexto | null>(null)
-const CLAVE = 'aeb.contexto'
 
 /** Se recuerda entre sesiones: nadie quiere volver a elegir su campo cada vez
  *  que abre el sistema. Si el navegador lo bloquea, no pasa nada. */
 function leer(): Record<string, string> {
   try {
-    return JSON.parse(localStorage.getItem(CLAVE) ?? '{}')
+    return leerDe<Record<string, string>>(CLAVE.contexto, {})
   } catch {
     return {}
   }
@@ -65,7 +65,7 @@ export function ProveedorContexto({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(CLAVE, JSON.stringify({ temporadaId, campoId, centroCostoId, mes }))
+      escribir(CLAVE.contexto, { temporadaId, campoId, centroCostoId, mes })
     } catch {
       /* almacenamiento bloqueado */
     }

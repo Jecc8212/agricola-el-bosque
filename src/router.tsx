@@ -4,6 +4,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { Layout } from '@/components/Layout'
 import { SinAcceso } from '@/components/SinAcceso'
 import { useAuth } from '@/lib/auth'
+const Respaldo = lazy(() => import('@/pages/Respaldo'))
 
 /* Cada módulo viaja en su propio archivo: quien entra a ver la asistencia no
    paga la contabilidad, ni el especimen del design system. */
@@ -63,6 +64,7 @@ export const router = createBrowserRouter([
       { path: 'maestros/modalidades', element: pagina(Modalidades, 'maestros') },
 
       { path: 'sistema/usuarios', element: pagina(Usuarios, 'sistema') },
+      { path: 'sistema/respaldo', element: pagina(Respaldo, 'sistema') },
       { path: 'sistema/design', element: pagina(DesignSystem, 'sistema') },
     ],
   },

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { CLAVE, leer, escribir } from '@/lib/almacen'
 
 /**
  * Control de acceso local.
@@ -163,26 +164,6 @@ interface Api {
 }
 
 const Ctx = createContext<Api | null>(null)
-const CLAVE_U = 'aeb.usuarios'
-const CLAVE_S = 'aeb.sesion'
-
-function leer<T>(k: string, def: T): T {
-  try {
-    const v = localStorage.getItem(k)
-    return v ? (JSON.parse(v) as T) : def
-  } catch {
-    return def
-  }
-}
-
-function escribir(k: string, v: unknown) {
-  try {
-    localStorage.setItem(k, JSON.stringify(v))
-  } catch {
-    /* almacenamiento bloqueado */
-  }
-}
-
 export function ProveedorAuth({ children }: { children: ReactNode }) {
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [sesion, setSesion] = useState<Usuario | null>(null)
@@ -195,10 +176,10 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
     let vivo = true
     ;(async () => {
       try {
-        let lista = sanearUsuarios(leer<unknown>(CLAVE_U, []))
+        let lista = sanearUsuarios(leer<unknown>(CLAVE.usuarios, []))
         // Si el saneado cambió algo, se persiste: así el arreglo es de una vez
         // y no se rehace en cada arranque.
-        if (lista.length > 0) escribir(CLAVE_U, lista)
+        if (lista.length > 0) escribir(CLAVE.usuarios, lista)
         if (lista.length === 0) {
           lista = await Promise.all(
             CUENTAS_INICIALES.map(async (c) => ({
@@ -209,11 +190,11 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
               provisoria: true,
             })),
           )
-          escribir(CLAVE_U, lista)
+          escribir(CLAVE.usuarios, lista)
         }
         if (!vivo) return
         setUsuarios(lista)
-        const guardada = leer<string | null>(CLAVE_S, null)
+        const guardada = leer<string | null>(CLAVE.sesion, null)
         setSesion(lista.find((u) => u.usuario === guardada) ?? null)
       } catch (e) {
         if (!vivo) return
@@ -233,7 +214,7 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
 
   const persistir = useCallback((lista: Usuario[]) => {
     setUsuarios(lista)
-    escribir(CLAVE_U, lista)
+    escribir(CLAVE.usuarios, lista)
   }, [])
 
   const entrar = useCallback(
@@ -245,7 +226,7 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
       if (u.inhabilitado) return { ok: false, error: 'Esta cuenta está inhabilitada' }
       if ((await hashear(clave)) !== u.hash) return { ok: false, error: 'Usuario o contraseña incorrectos' }
       setSesion(u)
-      escribir(CLAVE_S, u.usuario)
+      escribir(CLAVE.sesion, u.usuario)
       return { ok: true }
     },
     [usuarios],
@@ -253,7 +234,7 @@ export function ProveedorAuth({ children }: { children: ReactNode }) {
 
   const salir = useCallback(() => {
     setSesion(null)
-    escribir(CLAVE_S, null)
+    escribir(CLAVE.sesion, null)
   }, [])
 
   const cambiarClave = useCallback(

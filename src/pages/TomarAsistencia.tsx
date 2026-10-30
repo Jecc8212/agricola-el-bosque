@@ -13,6 +13,7 @@ import { imputacionDeModalidad } from '@/lib/vigencia'
 import { formatearRut } from '@/lib/rut'
 import { nombreCompleto } from '@/lib/types'
 import type { Trabajador } from '@/lib/types'
+import { guardarEvidencia } from '@/lib/almacen'
 
 type Paso = 1 | 2 | 3 | 4
 
@@ -300,11 +301,17 @@ export default function TomarAsistencia() {
 
   function finalizar() {
     if (!foto) return setError('Falta la foto de la hoja firmada de la charla.')
+    /* La evidencia va a su propia clave; el acta guarda sólo el identificador.
+       Si no cupo hay que decirlo: cerrar la jornada sin respaldo dejaría un
+       acta que dice tener evidencia y no la tiene. */
+    const evidencia = guardarEvidencia(foto)
+    if (!evidencia)
+      return setError('No se pudo guardar la foto: el almacenamiento está lleno. Haz un respaldo y libera espacio.')
     const jornada = cerrarJornada(
       {
         campoId: campoDeLaJornada, fecha, temporadaId: temporadaDeLaJornada,
         cerradaEn: new Date().toISOString(), cerradaPor: sesion?.usuario ?? '',
-        fotoCharla: foto, temaCharla: tema.trim() || undefined,
+        evidenciaCharla: evidencia, temaCharla: tema.trim() || undefined,
       },
       nomina.map((t) => {
         const presente = presentes.has(t.rut)
