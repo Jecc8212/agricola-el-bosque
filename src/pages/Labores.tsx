@@ -3,6 +3,7 @@ import { Pagina } from '@/components/Pagina'
 import { Chip } from '@/components/ui/Chip'
 import type { CampoForm } from '@/components/ui/FormularioModal'
 import { CLP } from '@/lib/formato'
+import { aplanar, buscarNodo, useMaestros } from '@/lib/maestros'
 import type { Nodo } from '@/lib/maestros'
 
 /**
@@ -11,6 +12,10 @@ import type { Nodo } from '@/lib/maestros'
  * y no en la labor padre — la sublabor puede tener el suyo.
  */
 export default function Labores() {
+  const { maestros } = useMaestros()
+  const riesgos = aplanar(maestros.riesgos)
+  const epp = aplanar(maestros.epp)
+
   const camposExtra = (n?: Nodo): CampoForm[] => [
     {
       tipo: 'numero', id: 'bono', etiqueta: 'Bono', valor: n?.bono ?? 0,
@@ -25,6 +30,24 @@ export default function Labores() {
     {
       tipo: 'texto', id: 'unidad', etiqueta: 'Unidad del trato', valor: n?.unidad ?? '',
       placeholder: 'bin, kilo, planta, hilera…',
+    },
+    {
+      tipo: 'casillas', id: 'riesgoIds', etiqueta: 'A qué riesgos expone',
+      valor: (n?.riesgoIds ?? []).join(','),
+      opciones: riesgos.map(({ nodo, nivel }) => ({
+        valor: nodo.id,
+        etiqueta: `${'— '.repeat(nivel)}${nodo.nombre}`,
+      })),
+      ayuda: 'De aquí sale qué charla corresponde y por qué se exige cierto equipo.',
+    },
+    {
+      tipo: 'casillas', id: 'eppIds', etiqueta: 'EPP que exige la labor',
+      valor: (n?.eppIds ?? []).join(','),
+      opciones: epp.map(({ nodo }) => ({
+        valor: nodo.id,
+        etiqueta: `${nodo.codigo ? `${nodo.codigo} ` : ''}${nodo.nombre}`,
+      })),
+      ayuda: 'Se suma al que ya exige el cargo. Aplicar químicos pide respirador lo haga quien lo haga.',
     },
   ]
 
@@ -41,7 +64,7 @@ export default function Labores() {
         codigoAutomatico
         camposExtra={camposExtra}
         columnaExtra={{
-          titulo: 'BONO Y TRATO',
+          titulo: 'BONO, TRATO Y PREVENCIÓN',
           render: (n) => {
             const bono = n.bono ?? 0
             const precio = n.precio ?? 0
@@ -59,6 +82,25 @@ export default function Labores() {
                 ) : (
                   <span className="text-2xs text-ink-disabled">sin precio a trato</span>
                 )}
+                {(() => {
+                  const expone = (n.riesgoIds ?? [])
+                    .map((id) => buscarNodo(maestros.riesgos, id)?.nombre)
+                    .filter(Boolean)
+                  const exige = (n.eppIds ?? [])
+                    .map((id) => buscarNodo(maestros.epp, id)?.nombre)
+                    .filter(Boolean)
+                  if (expone.length === 0 && exige.length === 0) return null
+                  return (
+                    <div className="mt-1 flex flex-col gap-0.5">
+                      {expone.length > 0 && (
+                        <span className="text-2xs text-warning-text">Riesgos: {expone.join(' · ')}</span>
+                      )}
+                      {exige.length > 0 && (
+                        <span className="text-2xs text-ink-faint">Exige: {exige.join(' · ')}</span>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
             )
           },

@@ -37,6 +37,8 @@ const SECCIONES: Seccion[] = [
     items: [
       { to: '/maestros/cargos', label: 'Cargos' },
       { to: '/maestros/epp', label: 'Elementos de protección' },
+      { to: '/maestros/riesgos', label: 'Riesgos y prevención' },
+      { to: '/maestros/charlas', label: 'Charlas de seguridad' },
       { to: '/maestros/labores', label: 'Labores' },
       { to: '/maestros/especies', label: 'Especies y variedades' },
       { to: '/maestros/centros-costo', label: 'Centros de costo' },

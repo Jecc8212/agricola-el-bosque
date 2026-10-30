@@ -121,12 +121,26 @@ export interface Nodo {
    * quien lo use.
    */
   eppIds?: string[]
+  /** Labores: a qué riesgos expone, del maestro de prevención. */
+  riesgoIds?: string[]
+  /**
+   * Charlas: el texto que guía a quien la da.
+   *
+   * No es decoración: una charla sin contenido queda en manos de lo que el
+   * jefe de campo recuerde esa mañana, y lo que se registra entonces respalda
+   * que hubo reunión, no que se dijo algo útil.
+   */
+  guion?: string
+  /** Charlas: se exige todos los días, sin depender de la labor. */
+  obligatoria?: boolean
+  /** Charlas: las labores que la activan cuando se asignan ese día. */
+  laborIds?: string[]
   hijos: Nodo[]
 }
 
 export type Catalogo =
   | 'cuentas' | 'centrosCosto' | 'campos' | 'temporadas' | 'modalidades' | 'labores'
-  | 'especies' | 'cargos' | 'epp'
+  | 'especies' | 'cargos' | 'epp' | 'riesgos' | 'charlas'
 
 export interface Maestros {
   cuentas: Nodo[]
@@ -141,6 +155,10 @@ export interface Maestros {
   cargos: Nodo[]
   /** Elementos de protección personal, para exigirlos por cargo y por labor. */
   epp: Nodo[]
+  /** A qué expone cada labor. El maestro de prevención. */
+  riesgos: Nodo[]
+  /** Charlas de seguridad: obligatorias diarias o activadas por la labor. */
+  charlas: Nodo[]
 }
 
 /** Un registro de asistencia es un día de una persona. La liquidación de sueldo
@@ -214,8 +232,16 @@ export interface Jornada {
    * inventario, con su propio ritmo trimestral.
    */
   evidenciaCharla?: string
-  /** De qué trató la charla. Una foto sin tema respalda la mitad. */
+  /** De qué trató la charla, escrito a mano. */
   temaCharla?: string
+  /**
+   * Las charlas del maestro que se dieron ese día.
+   *
+   * Se guardan por identificador y no por nombre: el informe de cumplimiento
+   * pregunta «¿cuántos días se dio la charla de motosierra?», y eso exige
+   * saber cuál fue, no leer un texto libre que cada quien escribe distinto.
+   */
+  charlaIds?: string[]
   presentes: number
   ausentes: number
   /** Reabierta por quien administra. El acta y su foto se conservan: son la
@@ -234,6 +260,8 @@ export const PROFUNDIDAD: Record<Catalogo, number> = {
   especies: 2,      // especie y variedad
   cargos: 1,        // lista plana: un cargo no tiene subcargos
   epp: 1,           // lista plana de elementos
+  riesgos: 2,       // familia de riesgo y riesgo concreto
+  charlas: 1,       // lista plana de charlas
 }
 
 export const NOMBRE_CATALOGO: Record<Catalogo, string> = {
@@ -246,6 +274,8 @@ export const NOMBRE_CATALOGO: Record<Catalogo, string> = {
   especies: 'Especies y variedades',
   cargos: 'Cargos',
   epp: 'Elementos de protección',
+  riesgos: 'Riesgos y prevención',
+  charlas: 'Charlas de seguridad',
 }
 
 let contador = 0
@@ -365,6 +395,38 @@ function semilla(): Maestros {
       nodo('Raleo', { codigo: '04', bono: 0, precio: 0, unidad: 'planta' }),
       nodo('Fertilización', { codigo: '05', bono: 0, precio: 0, unidad: 'hilera' }),
       nodo('Aplicaciones químicas', { codigo: '06', bono: 0, precio: 0, unidad: 'hectárea' }),
+    ],
+    /* Los riesgos de las labores agrícolas más comunes, agrupados por familia.
+       La empresa los ajusta a su matriz real; esto es un punto de partida para
+       no empezar con la pantalla en blanco. */
+    riesgos: [
+      nodo('Mecánicos', { codigo: '01', hijos: [
+        nodo('Atrapamiento con maquinaria', { codigo: '01.01' }),
+        nodo('Corte con herramienta', { codigo: '01.02' }),
+        nodo('Volcamiento de tractor', { codigo: '01.03' }),
+      ]}),
+      nodo('Químicos', { codigo: '02', hijos: [
+        nodo('Inhalación de plaguicidas', { codigo: '02.01' }),
+        nodo('Contacto dérmico con agroquímicos', { codigo: '02.02' }),
+      ]}),
+      nodo('Físicos', { codigo: '03', hijos: [
+        nodo('Caída de altura', { codigo: '03.01' }),
+        nodo('Caída al mismo nivel', { codigo: '03.02' }),
+        nodo('Exposición a ruido', { codigo: '03.03' }),
+        nodo('Exposición solar y golpe de calor', { codigo: '03.04' }),
+      ]}),
+      nodo('Ergonómicos', { codigo: '04', hijos: [
+        nodo('Sobreesfuerzo y manejo de carga', { codigo: '04.01' }),
+        nodo('Movimiento repetitivo', { codigo: '04.02' }),
+      ]}),
+    ],
+    /* Dos charlas obligatorias para arrancar. Las de labor las arma la empresa
+       según su matriz de riesgos. */
+    charlas: [
+      nodo('Orden, aseo y uso de EPP', { codigo: '01', obligatoria: true,
+        guion: 'Recordar el uso correcto del equipo entregado, mantener despejadas las vías de tránsito y avisar de cualquier condición insegura antes de empezar.' }),
+      nodo('Hidratación y exposición solar', { codigo: '02', obligatoria: false,
+        guion: 'Beber agua cada hora, usar gorro legionario y bloqueador, y buscar sombra en las horas de mayor radiación.' }),
     ],
     /* El equipo de protección más común. La empresa lo amplía según lo que
        entregue de verdad. */

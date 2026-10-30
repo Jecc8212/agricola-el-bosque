@@ -141,6 +141,10 @@ export function EditorArbol({
     if ('porTrato' in v) cambios.porTrato = v.porTrato === 'si'
     if ('tipo' in v) cambios.tipo = (v.tipo || undefined) as Nodo['tipo']
     if ('eppIds' in v) cambios.eppIds = v.eppIds.split(',').filter(Boolean)
+    if ('riesgoIds' in v) cambios.riesgoIds = v.riesgoIds.split(',').filter(Boolean)
+    if ('laborIds' in v) cambios.laborIds = v.laborIds.split(',').filter(Boolean)
+    if ('guion' in v) cambios.guion = v.guion.trim() || undefined
+    if ('obligatoria' in v) cambios.obligatoria = v.obligatoria === 'si'
     return cambios
   }
 

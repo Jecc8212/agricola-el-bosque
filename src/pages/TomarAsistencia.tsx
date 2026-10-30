@@ -14,6 +14,7 @@ import { formatearRut } from '@/lib/rut'
 import { nombreCompleto } from '@/lib/types'
 import type { Trabajador } from '@/lib/types'
 import { guardarEvidencia } from '@/lib/almacen'
+import { charlasDelDia, eppExigido, origenDelEpp } from '@/lib/prevencion'
 
 type Paso = 1 | 2 | 3 | 4
 
@@ -167,6 +168,7 @@ export default function TomarAsistencia() {
   const [epp, setEpp] = useState<Set<string>>(new Set())
   const [foto, setFoto] = useState<string | null>(null)
   const [tema, setTema] = useState('')
+  const [charlasDadas, setCharlasDadas] = useState<Set<string>>(new Set())
   const [error, setError] = useState('')
   const [confirmando, setConfirmando] = useState(false)
   const [listo, setListo] = useState<{ presentes: number; ausentes: number } | null>(null)
@@ -283,6 +285,16 @@ export default function TomarAsistencia() {
   const sinCentro = vinieron.filter((t) => !centroDe(t))
   const sinCuenta = vinieron.filter((t) => !reglaDe(t).cuentaId)
 
+  /** Lo que exige el equipo de protección de cada persona hoy. */
+  const eppDe = (t: Trabajador) => eppExigido(maestros, t, laboresDelDia(t))
+
+  /* Las charlas se calculan sobre las labores realmente asignadas, no sobre
+     el catálogo entero: así sólo aparece lo que ese día corresponde. */
+  const laboresAsignadas = vinieron.flatMap((t) => laboresDelDia(t))
+  const charlas = charlasDelDia(maestros, laboresAsignadas)
+  const charlasExigidas = [...charlas.obligatorias, ...charlas.porLabor]
+  const faltanCharlas = charlas.obligatorias.filter((c) => !charlasDadas.has(c.id))
+
   /** El bono de la labor sólo se paga con el EPP firmado. */
   const bonoDe = (t: Trabajador) =>
     laboresDelDia(t).reduce((s, id) => s + (buscarNodo(maestros.labores, id)?.bono ?? 0), 0)
@@ -300,6 +312,10 @@ export default function TomarAsistencia() {
   }
 
   function finalizar() {
+    if (faltanCharlas.length > 0)
+      return setError(
+        `Falta marcar ${faltanCharlas.length === 1 ? 'la charla obligatoria' : `${faltanCharlas.length} charlas obligatorias`}: ${faltanCharlas.map((c) => c.nombre).join(', ')}.`,
+      )
     if (!foto) return setError('Falta la foto de la hoja firmada de la charla.')
     /* La evidencia va a su propia clave; el acta guarda sólo el identificador.
        Si no cupo hay que decirlo: cerrar la jornada sin respaldo dejaría un
@@ -312,6 +328,7 @@ export default function TomarAsistencia() {
         campoId: campoDeLaJornada, fecha, temporadaId: temporadaDeLaJornada,
         cerradaEn: new Date().toISOString(), cerradaPor: sesion?.usuario ?? '',
         evidenciaCharla: evidencia, temaCharla: tema.trim() || undefined,
+        charlaIds: [...charlasDadas],
       },
       nomina.map((t) => {
         const presente = presentes.has(t.rut)
@@ -636,6 +653,35 @@ export default function TomarAsistencia() {
                           </div>
                         </div>
 
+                        {/* Preguntar «¿usa su EPP?» sin decir cuál deja la
+                            respuesta en manos de lo que recuerde quien mira.
+                            Aquí se nombra lo que el cargo y la labor exigen. */}
+                        {(() => {
+                          const exigido = eppDe(t)
+                          if (exigido.length === 0) return null
+                          return (
+                            <p className="mt-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-2xs">
+                              <span className="tracking-wide text-ink-faint">DEBE USAR</span>
+                              {exigido.map((e) => (
+                                <span
+                                  key={e.id}
+                                  className={cn(
+                                    'rounded-xs px-1.5 py-0.5',
+                                    origenDelEpp(maestros, t, laboresDelDia(t), e.id) === 'cargo'
+                                      ? 'bg-surface-sunken text-ink-muted'
+                                      : 'bg-warning-tint text-warning-text',
+                                  )}
+                                >
+                                  {e.nombre}
+                                </span>
+                              ))}
+                              <span className="text-ink-disabled">
+                                lo resaltado lo exige la labor de hoy
+                              </span>
+                            </p>
+                          )
+                        })()}
+
                         {/* El bono es la palanca que hace que el EPP importe: se
                             dice aquí, no en la liquidación de fin de mes. */}
                         {bono > 0 && (
@@ -742,6 +788,59 @@ export default function TomarAsistencia() {
                   Saca una foto de la hoja donde los trabajadores firmaron la charla del día.
                   Es el respaldo de que la charla se dio, y lo que cierra la jornada.
                 </p>
+
+                {charlasExigidas.length > 0 && (
+                  <div className="mt-4 rounded-lg border border-line bg-surface-sunken/40 p-3.5">
+                    <p className="text-2xs tracking-wide text-ink-faint">
+                      CHARLAS QUE CORRESPONDEN HOY
+                    </p>
+                    <ul className="mt-2 flex flex-col gap-2">
+                      {charlasExigidas.map((c) => {
+                        const dada = charlasDadas.has(c.id)
+                        return (
+                          <li key={c.id}>
+                            <label className="flex cursor-pointer items-start gap-2">
+                              <input
+                                type="checkbox" checked={dada}
+                                onChange={() =>
+                                  setCharlasDadas((prev) => {
+                                    const copia = new Set(prev)
+                                    if (copia.has(c.id)) copia.delete(c.id)
+                                    else copia.add(c.id)
+                                    return copia
+                                  })
+                                }
+                                className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-primary"
+                              />
+                              <span className="min-w-0">
+                                <span className="flex flex-wrap items-baseline gap-2">
+                                  <span className="text-base font-medium">{c.nombre}</span>
+                                  {c.obligatoria ? (
+                                    <span className="rounded-xs bg-primary-tint px-1.5 py-0.5 text-2xs text-primary-text">
+                                      obligatoria
+                                    </span>
+                                  ) : (
+                                    <span className="rounded-xs bg-warning-tint px-1.5 py-0.5 text-2xs text-warning-text">
+                                      la pide la labor de hoy
+                                    </span>
+                                  )}
+                                </span>
+                                {c.guion && (
+                                  <span className="mt-0.5 block text-sm text-ink-faint">{c.guion}</span>
+                                )}
+                              </span>
+                            </label>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                    {faltanCharlas.length > 0 && (
+                      <p className="mt-2.5 text-2xs text-warning-text">
+                        Las obligatorias hay que darlas y marcarlas para poder cerrar la jornada.
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Una foto sin tema respalda la mitad: dice que hubo charla,
                     pero no de qué trató. */}
